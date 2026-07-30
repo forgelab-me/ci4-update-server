@@ -9,6 +9,46 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.1.0] - 2026-07-30
+
+Brings in ci4-updater 2.2 → 2.5. Most of this is visible in the **Updates**
+panel of this server, which self-updates like any other app.
+
+### Added
+
+- **Rollback.** The panel now lists the backups taken before each update and
+  restores any of them in one click: files are put back as they were and files
+  the update added are removed. Backups whose update shipped migrations are
+  flagged, because a restore reverts code and never the database.
+- **Optional signed releases.** Set `Config\Updater::$publicKeys` to refuse any
+  release that isn't signed by a key you trust. Nothing to do on the serving
+  side: a signature travels inside the release archive, so projects hosted here
+  can be signed without any change to this server.
+- **Backup retention.** `Config\Updater::$keepBackups` (default 5) caps how
+  many backups are kept; the oldest are pruned after an update is applied.
+  Set it to `0` to keep everything.
+
+### Changed
+
+- The update panel is rendered from the package rather than from a copy in
+  `app/Views`, so its improvements now arrive with `composer update`. The
+  layout it extends and the name it displays come from
+  `Config\Updater::$layout` and `$appName`.
+- Requires `forgelab-me/ci4-updater` ^2.5.
+
+### Upgrading
+
+Deploy as usual. Two things worth knowing:
+
+- **`app/Views/admin/updates.php` is gone from this release.** If your
+  deployment had customised that file, the update removes your version and the
+  packaged panel takes over. Run `php spark updater:setup --views` afterwards to
+  get an editable copy back, or set `$layout` / `$appName` and use the packaged
+  one.
+- **Old backups are now pruned** once an update is applied — the five most
+  recent are kept. Set `$keepBackups = 0` before updating if you would rather
+  keep them all.
+
 ## [1.0.1] - 2026-07-30
 
 ### Security

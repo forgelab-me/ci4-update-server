@@ -12,11 +12,16 @@ use Forgelabme\Ci4Updater\Config\Updater as BaseUpdater;
  */
 class Updater extends BaseUpdater
 {
-    public const VERSION = '1.0.1';
+    public const VERSION = '1.1.0';
 
     public const DATE = '2026-07-30';
 
     public const USER_AGENT = 'UpdateServerAdmin/1.0';
+
+    // This app's layout is 'layouts/main' (plural), not the package default.
+    public string $layout = 'layouts/main';
+
+    public ?string $appName = 'Update Server';
 
     // Reuse the app's own app_settings table instead of a JSON file in writable/.
     public string $settingsClass = \App\Models\AppSettingModel::class;

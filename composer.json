@@ -22,7 +22,7 @@
         "ext-zip": "*",
         "codeigniter4/framework": "^4.7",
         "codeigniter4/shield": "^1.3",
-        "forgelab-me/ci4-updater": "^2.1",
+        "forgelab-me/ci4-updater": "^2.5",
         "laminas/laminas-escaper": "^2.18",
         "psr/log": "^3.0"
     },
