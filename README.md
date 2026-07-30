@@ -171,6 +171,15 @@ own project (e.g. slug `update-server`, pointing `update_server_url` at
 itself or another instance), then use the `/admin/updates` panel to check,
 download, diff, and apply — with automatic backup and DB migrations.
 
+Paste the matching section of [CHANGELOG.md](CHANGELOG.md) into the upload
+form's *Changelog* field: that text is what other instances see in their
+update panel.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) — written for whoever deploys this server,
+including what to do when upgrading.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

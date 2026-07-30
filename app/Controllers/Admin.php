@@ -10,6 +10,14 @@ use CodeIgniter\Shield\Models\UserModel;
 
 class Admin extends BaseController
 {
+    /**
+     * Settings exposed on /admin/settings. Acts as the whitelist for what a
+     * POST there is allowed to write, and fixes the display order.
+     */
+    private const SETTING_KEYS = [
+        'update_server_url',
+        'update_server_token',
+    ];
 
     // -------------------------------------------------------------------------
     // Auth
@@ -90,14 +98,25 @@ class Admin extends BaseController
             }
 
             if ($password !== '') {
-                if (strlen($password) < 8) {
-                    session()->setFlashdata('error', 'Password must be at least 8 characters.');
-                    return redirect()->back()->withInput();
-                }
                 if ($password !== $passwordConfirm) {
                     session()->setFlashdata('error', 'Passwords do not match.');
                     return redirect()->back()->withInput();
                 }
+
+                // Defer to Shield's own rules (minimum length from Config\Auth,
+                // plus its compromised-password, dictionary and personal-info
+                // checks) instead of a hand-rolled length test.
+                if (! $this->validateData(
+                    ['password' => $password, 'email' => $email, 'username' => $username],
+                    ['password' => 'required|strong_password']
+                )) {
+                    session()->setFlashdata(
+                        'error',
+                        implode(' ', $this->validator->getErrors())
+                    );
+                    return redirect()->back()->withInput();
+                }
+
                 $user->setPassword($password);
             }
 
@@ -133,30 +152,31 @@ class Admin extends BaseController
         $passwordFields = ['update_server_token'];
 
         if ($this->request->is('post')) {
-            foreach ($this->request->getPost() as $key => $value) {
-                if ($key === csrf_token()) {
+            // Only known keys are persisted: without this, any extra POST field
+            // would silently become a stored setting.
+            foreach (self::SETTING_KEYS as $key) {
+                $value = $this->request->getPost($key);
+                if ($value === null) {
                     continue;
                 }
                 if (in_array($key, $passwordFields, true) && $value === '') {
-                    continue;
+                    continue; // empty secret field means "leave unchanged"
                 }
-                $settingModel->setSetting($key, $value);
+                $settingModel->setSetting($key, (string) $value);
             }
             session()->setFlashdata('success', 'Settings saved.');
             return redirect()->to(site_url('admin/settings'));
         }
 
-        $rows     = $settingModel->findAll();
-        $settings = [];
-        foreach ($rows as $row) {
-            $settings[$row['key']] = $row['value'];
+        $stored = [];
+        foreach ($settingModel->findAll() as $row) {
+            $stored[$row['key']] = $row['value'];
         }
 
-        $defaults = ['update_server_url' => '', 'update_server_token' => ''];
-        foreach ($defaults as $key => $default) {
-            if (! array_key_exists($key, $settings)) {
-                $settings[$key] = $default;
-            }
+        // Render in a fixed order, with the known keys always present.
+        $settings = [];
+        foreach (self::SETTING_KEYS as $key) {
+            $settings[$key] = $stored[$key] ?? '';
         }
 
         return view('admin/settings', [

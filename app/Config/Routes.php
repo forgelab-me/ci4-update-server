@@ -8,7 +8,10 @@ $routes->get('/', 'Home::index');
 // -------------------------------------------------------------------------
 // Auth — login/logout
 // -------------------------------------------------------------------------
-$routes->match(['get', 'post'], 'auth/login', 'Admin::login');
+// 'auth-rates' is Shield's throttling filter: it caps login attempts per IP so
+// the form can't be brute-forced.
+$routes->get('auth/login', 'Admin::login');
+$routes->post('auth/login', 'Admin::login', ['filter' => 'auth-rates']);
 $routes->get('auth/logout', 'Admin::logout');
 $routes->get('dashboard', 'Admin::index', ['filter' => 'admin']);
 

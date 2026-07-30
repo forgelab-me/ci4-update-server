@@ -10,6 +10,13 @@ use CodeIgniter\HTTP\RedirectResponse;
 
 class Projects extends BaseController
 {
+    /**
+     * Upper bound for an uploaded release archive. PHP's upload_max_filesize
+     * still applies and may be lower; this is an explicit application-level
+     * cap so the limit doesn't depend on server configuration alone.
+     */
+    private const MAX_RELEASE_BYTES = 256 * 1024 * 1024;
+
     private ProjectModel $projects;
     private ReleaseModel $releases;
 
@@ -154,6 +161,14 @@ class Projects extends BaseController
             session()->setFlashdata('error', 'ZIP file must have a .zip extension.');
             return redirect()->to(site_url("projects/{$projectId}"));
         }
+        if ($zipFile->getSize() > self::MAX_RELEASE_BYTES) {
+            session()->setFlashdata('error', sprintf(
+                'Release archive is too large (%.1f MB); the limit is %d MB.',
+                $zipFile->getSize() / 1048576,
+                (int) (self::MAX_RELEASE_BYTES / 1048576)
+            ));
+            return redirect()->to(site_url("projects/{$projectId}"));
+        }
 
         $manifest = $this->readManifestFromZip($zipFile->getTempName());
         if ($manifest === null) {
@@ -165,7 +180,16 @@ class Projects extends BaseController
             return redirect()->to(site_url("projects/{$projectId}"));
         }
 
-        $version    = trim((string) $manifest['version']);
+        $version = trim((string) $manifest['version']);
+
+        // The version comes from manifest.json *inside* the uploaded archive and
+        // is used as a directory name, so it has to be constrained before it
+        // touches the filesystem — otherwise "../../public" escapes writable/.
+        if (! self::isSafeVersion($version)) {
+            session()->setFlashdata('error', 'Invalid version in manifest.json: only letters, digits, dots, hyphens and underscores are allowed (max 20 characters).');
+            return redirect()->to(site_url("projects/{$projectId}"));
+        }
+
         $uploadPath = WRITEPATH . 'uploads/' . $project['slug'] . '/' . $version;
 
         if (! is_dir($uploadPath)) {
@@ -229,6 +253,22 @@ return redirect()->to(site_url("projects/{$release['project_id']}"));
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * A version string is only ever used as a path segment and as a lookup key,
+     * so it's restricted to a conservative charset. The 20-character cap
+     * matches the `version` column in the releases table.
+     *
+     * Rejects traversal (`..`), separators, and anything exotic.
+     */
+    public static function isSafeVersion(string $version): bool
+    {
+        return $version !== ''
+            && strlen($version) <= 20
+            // \z rather than $: PCRE's $ would also match before a trailing newline.
+            && preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]*\z/', $version) === 1
+            && ! str_contains($version, '..');
+    }
 
     /**
      * Reads manifest.json from inside a ZIP archive.
