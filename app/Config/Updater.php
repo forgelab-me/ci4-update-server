@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Config;
+
+use Forgelabme\Ci4Updater\Config\Updater as BaseUpdater;
+
+/**
+ * Self-update system configuration for this app.
+ * Bump VERSION / DATE before each release, then run `php spark update:manifest`.
+ */
+class Updater extends BaseUpdater
+{
+    public const VERSION = '1.0.0';
+
+    public const DATE = '2026-07-29';
+
+    public const USER_AGENT = 'UpdateServerAdmin/1.0';
+
+    // Reuse the app's own app_settings table instead of a JSON file in writable/.
+    public string $settingsClass = \App\Models\AppSettingModel::class;
+}
