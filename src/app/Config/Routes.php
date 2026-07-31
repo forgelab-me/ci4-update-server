@@ -43,4 +43,12 @@ $routes->group('projects', ['filter' => 'admin'], static function (RouteCollecti
 $routes->get('api/(:segment)/latest.json',                     'ApiController::latest/$1');
 $routes->get('api/(:segment)/files/(:segment)/(:segment)',     'ApiController::file/$1/$2/$3');
 
-service('updater')->routes($routes);
+// Self-update writes into app/ and public/. In a container those writes are
+// discarded when the container is recreated, and they conflict with updating by
+// pulling a new image — so the image sets SELF_UPDATE=false and the panel drops
+// the download/apply steps. Everything else (migrations, cache, backups) stays.
+if (env('SELF_UPDATE', true) !== false) {
+    service('updater')->routes($routes);
+} else {
+    $routes->get('admin/updates', 'Admin::updatesDisabled', ['filter' => 'admin']);
+}

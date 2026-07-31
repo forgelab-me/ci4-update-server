@@ -1,0 +1,42 @@
+.git
+.github
+
+# Compose's own environment files, at the repository root. The image takes its
+# configuration from the container environment, never from a file baked in.
+.env*
+
+# Packaging and documentation live at the root and stay out of the image.
+# docker/ is NOT excluded: the Dockerfile copies php.ini and entrypoint.sh.
+docs/
+compose.yaml
+compose.override.yaml
+CHANGELOG.md
+README.md
+LICENSE
+
+# Rebuilt in the vendor stage
+src/vendor/
+
+# The application's own environment file. src/.env.example is kept: it is the
+# reference for anyone inspecting configuration from inside the container.
+src/.env
+
+# Runtime data — belongs in the volume, never in the image
+src/writable/cache/*
+src/writable/logs/*
+src/writable/session/*
+src/writable/debugbar/*
+src/writable/tmp/*
+src/writable/uploads/*
+src/writable/backups/*
+*.db
+
+# Build artifacts and local tooling
+src/manifest.json
+src/manifest.json.sig
+src/release_*.zip
+src/build/
+src/.phpunit.cache/
+src/.phpunit.result.cache
+src/tests/
+src/phpunit.dist.xml

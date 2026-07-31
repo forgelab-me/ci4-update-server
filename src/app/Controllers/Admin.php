@@ -142,6 +142,25 @@ class Admin extends BaseController
     // see app/Config/Routes.php and app/Config/Updater.php.
     // -------------------------------------------------------------------------
 
+    /**
+     * Stands in for the update panel when SELF_UPDATE is off — the container
+     * case, where applying an update would write into a filesystem that is
+     * thrown away on the next deploy.
+     */
+    public function updatesDisabled(): string
+    {
+        $db = db_connect();
+
+        return view('admin/updates_disabled', [
+            'title'      => 'Updates',
+            'appVersion' => \Config\Updater::VERSION,
+            'appDate'    => \Config\Updater::DATE,
+            'phpVersion' => PHP_VERSION,
+            'ciVersion'  => \CodeIgniter\CodeIgniter::CI_VERSION,
+            'dbVersion'  => $db->getVersion(),
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // Settings
     // -------------------------------------------------------------------------

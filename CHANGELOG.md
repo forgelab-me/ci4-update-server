@@ -9,6 +9,63 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.2.0] - 2026-07-30
+
+### Added
+
+- **Official container image**, published to
+  `ghcr.io/forgelab-me/ci4-update-server` for amd64 and arm64 on every tag.
+  `compose.yaml` and `.env.example` give a working stack — server plus
+  MariaDB — in three commands.
+- The container waits for the database, runs migrations and creates or
+  re-syncs the admin account on every start. All idempotent, so restarts and
+  redeploys are safe.
+- `SELF_UPDATE` and `RUN_MIGRATIONS` environment switches.
+- `ADMIN_PASSWORD`: the container hashes it at startup. Compose interpolates
+  `$` in env files, so pasting a bcrypt hash there silently loses characters and
+  produces an account that accepts no password; supplying the password avoids
+  the trap entirely. `ADMIN_PASSWORD_HASH` still works and now takes precedence,
+  and a hash that doesn't parse is refused rather than seeded.
+
+### Changed
+
+- **The application moved into `src/`.** The repository root now holds only
+  packaging and documentation — `Dockerfile`, `compose.yaml`, `docker/`,
+  `docs/`, `README`, `CHANGELOG`. This is a repository layout change with no
+  effect on a running instance: releases still ship `app/` and `public/` at the
+  archive root, so self-update and rollback are untouched, and the container is
+  byte-for-byte the same tree at `/var/www/html`. Only a **source checkout** is
+  affected — see *Upgrading* below.
+- In-place self-update is **off in the container** (`SELF_UPDATE=false`). It
+  writes into `app/` and `public/`, which a container discards when it is
+  recreated — an update would report success and then vanish. The panel
+  explains that the image is the unit of deployment instead. Outside a
+  container nothing changes.
+
+### Notes for container deployments
+
+- Pass configuration with CodeIgniter's **underscore** names (`app_baseURL`,
+  `database_default_hostname`), not the dotted ones. The container shell is
+  dash, which drops environment variables whose names aren't valid shell
+  identifiers, so the dotted form never reaches PHP or Apache.
+- There are two environment files and they never collide: `/.env` configures
+  Compose and the container, `/src/.env` configures CodeIgniter.
+- See [docs/docker.md](docs/docker.md) for the full guide.
+- `/var/www/html/writable` must be a volume: it holds the release archives
+  served to every connected app. Back it up with the database.
+
+### Upgrading a source checkout
+
+Nothing to do on a container deployment, and nothing to do on an instance that
+updates itself through the panel. On a checkout that tracks this repository:
+
+- `git pull` moves the application into `src/`. Your `.env`, `vendor/` and
+  `writable/` are untracked, so git leaves them where they are — move them
+  yourself: `mv .env vendor writable src/`. `writable/` in particular holds the
+  uploaded releases, so move it rather than letting it be recreated empty.
+- Point the document root at `src/public`, and run `composer`, `spark` and
+  `phpunit` from `src/`.
+
 ## [1.1.0] - 2026-07-30
 
 Brings in ci4-updater 2.2 → 2.5. Most of this is visible in the **Updates**

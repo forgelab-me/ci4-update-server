@@ -38,22 +38,47 @@ flowchart LR
 ![Settings](docs/screenshots/03-settings.jpg)
 *Settings — including this server's own updater keys, stored in the database*
 
+## Docker
+
+```bash
+curl -O https://raw.githubusercontent.com/forgelab-me/ci4-update-server/main/compose.yaml
+curl -o .env https://raw.githubusercontent.com/forgelab-me/ci4-update-server/main/.env.example
+# edit .env, then:
+docker compose up -d
+```
+
+Server plus MariaDB, from `ghcr.io/forgelab-me/ci4-update-server` (amd64 and
+arm64). The container waits for the database, migrates, and creates the admin
+account on every start — all idempotent.
+
+Updates come from pulling a new image, so in-place self-update is off in the
+container: it would write to a filesystem that is thrown away on the next
+deploy.
+
+Full guide, including configuration, backups and running behind a proxy:
+**[Docker](docs/docker.md)**.
+
 ## Requirements
 
 - PHP 8.2+
 - `ext-intl`, `ext-mbstring`, `ext-zip`
 - MySQL/MariaDB (or any DB supported by CodeIgniter 4)
 
-## Install
+## Install from source
+
+The application lives in `src/`; the repository root holds packaging and
+documentation. Every PHP command below runs from `src/`.
 
 ```bash
 git clone https://github.com/forgelab-me/ci4-update-server.git
-cd ci4-update-server
+cd ci4-update-server/src
 composer install
 cp .env.example .env
 ```
 
-Edit `.env`:
+Point your web server's document root at `src/public`.
+
+Edit `src/.env`:
 
 - `app.baseURL` — the public URL of this server.
 - `database.default.*` — your DB credentials.
@@ -165,8 +190,8 @@ itself — dogfooding the same package every app installs. It stores its
 instead of the package's default JSON file, so those two settings sit
 alongside every other setting on the `/admin/settings` page.
 
-To cut a release of this server itself: bump `app/Config/Updater.php`, run
-`php spark update:manifest`, upload the resulting ZIP as a release for its
+To cut a release of this server itself: bump `src/app/Config/Updater.php`, run
+`php spark update:manifest` from `src/`, upload the resulting ZIP as a release for its
 own project (e.g. slug `update-server`, pointing `update_server_url` at
 itself or another instance), then use the `/admin/updates` panel to check,
 download, diff, and apply — with automatic backup and DB migrations.

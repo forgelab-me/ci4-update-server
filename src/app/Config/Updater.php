@@ -12,7 +12,7 @@ use Forgelabme\Ci4Updater\Config\Updater as BaseUpdater;
  */
 class Updater extends BaseUpdater
 {
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.2.0';
 
     public const DATE = '2026-07-30';
 
