@@ -10,7 +10,7 @@ class ReleaseModel extends Model
     protected $primaryKey       = 'id';
     protected $useAutoIncrement = true;
     protected $returnType       = 'array';
-    protected $allowedFields    = ['project_id', 'version', 'changelog', 'zip_path', 'manifest_path', 'is_latest', 'released_at', 'created_at'];
+    protected $allowedFields    = ['project_id', 'version', 'roots', 'changelog', 'zip_path', 'manifest_path', 'is_latest', 'released_at', 'created_at'];
     protected $useTimestamps    = false;
 
     public function getLatestForProject(int $projectId): ?array

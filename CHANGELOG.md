@@ -9,6 +9,47 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.3.0] - 2026-07-31
+
+Brings in ci4-updater 2.6 → 2.7, where a release started declaring the
+directories it covers and `vendor/` became something a release can ship.
+
+### Added
+
+- **Releases record the directories they cover**, read from the manifest on
+  upload and shown in a *Covers* column on the project page. Worth seeing
+  before promoting one: a release that ships `vendor/` is an order of
+  magnitude larger, and any app that hasn't listed `vendor` in
+  `Config\Updater::$allowedRoots` refuses it outright.
+
+  Releases uploaded earlier, and any archive built before ci4-updater 2.6,
+  show `—`. They keep working exactly as they did.
+
+### Fixed
+
+- **The stored `manifest.json` is now the archive's bytes rather than a
+  re-encoding of them.** A release signature covers the exact bytes of the
+  manifest, and re-serialising changed spacing, key order and slash escaping
+  enough to break the match. It affected only the `manifest_url` fallback —
+  apps read the manifest from inside the ZIP, which was untouched — but there
+  was no reason to serve a copy that differs from the original.
+
+### Notes
+
+- This server records a release's scope; it never judges it. Nothing here
+  needs configuring to host a release that ships `vendor/`. Whether such a
+  release is accepted is decided by each installation's
+  `Config\Updater::$allowedRoots`.
+- This server's **own** updates stay `app` + `public`, the default. Its
+  `vendor/` is managed by Composer in a source checkout, and by the image in a
+  container.
+- Requires `forgelab-me/ci4-updater` ^2.7.
+
+### Upgrading
+
+Deploy as usual, then run `php spark migrate --all` from `src/` — one new
+column on `releases`. Nothing else changes.
+
 ## [1.2.0] - 2026-07-30
 
 ### Added

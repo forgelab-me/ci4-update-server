@@ -170,11 +170,14 @@ class Projects extends BaseController
             return redirect()->to(site_url("projects/{$projectId}"));
         }
 
-        $manifest = $this->readManifestFromZip($zipFile->getTempName());
-        if ($manifest === null) {
+        $read = $this->readManifestFromZip($zipFile->getTempName());
+        if ($read === null) {
             session()->setFlashdata('error', 'No manifest.json found inside the ZIP. Make sure it is included at the root of the archive.');
             return redirect()->to(site_url("projects/{$projectId}"));
         }
+
+        $manifest = $read['data'];
+
         if (empty($manifest['version'])) {
             session()->setFlashdata('error', 'manifest.json inside the ZIP must have a "version" field.');
             return redirect()->to(site_url("projects/{$projectId}"));
@@ -198,14 +201,14 @@ class Projects extends BaseController
 
         $zipFile->move($uploadPath, 'release.zip', true);
 
-        file_put_contents(
-            $uploadPath . '/manifest.json',
-            (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
+        // The bytes from the archive, verbatim. Re-encoding would produce a
+        // manifest that no longer matches its signature.
+        file_put_contents($uploadPath . '/manifest.json', $read['raw']);
 
         $releaseId = $this->releases->insert([
             'project_id'    => $projectId,
             'version'       => $version,
+            'roots'         => self::readRoots($manifest),
             'changelog'     => $changelog !== '' ? $changelog : null,
             'zip_path'      => $uploadPath . '/release.zip',
             'manifest_path' => $uploadPath . '/manifest.json',
@@ -274,6 +277,12 @@ return redirect()->to(site_url("projects/{$release['project_id']}"));
      * Reads manifest.json from inside a ZIP archive.
      * Handles both flat ZIPs and ZIPs with a single root prefix (e.g. GitHub releases).
      */
+    /**
+     * @return array{data: array<string, mixed>, raw: string}|null
+     *         The decoded manifest and the exact bytes it was decoded from.
+     *         Both matter: a release signature covers those bytes, so the copy
+     *         this server serves has to be the original and not a re-encoding.
+     */
     private function readManifestFromZip(string $zipPath): ?array
     {
         $zip = new \ZipArchive();
@@ -295,7 +304,40 @@ return redirect()->to(site_url("projects/{$release['project_id']}"));
         }
 
         $data = json_decode($content, true);
-        return (is_array($data) && json_last_error() === JSON_ERROR_NONE) ? $data : null;
+
+        return (is_array($data) && json_last_error() === JSON_ERROR_NONE)
+            ? ['data' => $data, 'raw' => $content]
+            : null;
+    }
+
+    /**
+     * The directories a release covers, as declared in its manifest.
+     *
+     * Stored for display only — this server never applies an update, so it
+     * takes no view on whether a scope is acceptable. That decision belongs to
+     * each installation's Config\Updater::$allowedRoots.
+     *
+     * Null for manifests generated before ci4-updater 2.6, which declare none.
+     */
+    public static function readRoots(array $manifest): ?string
+    {
+        if (! isset($manifest['roots']) || ! is_array($manifest['roots'])) {
+            return null;
+        }
+
+        $roots = [];
+
+        foreach ($manifest['roots'] as $root) {
+            // Rendered in the admin panel, so it is constrained here rather
+            // than trusted from an uploaded archive.
+            if (is_string($root) && preg_match('/\A[A-Za-z0-9_][A-Za-z0-9._-]{0,63}\z/', $root) === 1) {
+                $roots[] = $root;
+            }
+        }
+
+        $joined = implode(', ', array_unique($roots));
+
+        return $joined === '' ? null : mb_substr($joined, 0, 255);
     }
 
     private function detectZipPrefix(\ZipArchive $zip): string

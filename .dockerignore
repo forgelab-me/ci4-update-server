@@ -17,6 +17,10 @@ LICENSE
 # Rebuilt in the vendor stage
 src/vendor/
 
+# Previous dependency trees parked by a swapped-root update. Never in an
+# image: it would ship a second copy of vendor/ that nothing there can use.
+src/.updater-swap/
+
 # The application's own environment file. src/.env.example is kept: it is the
 # reference for anyone inspecting configuration from inside the container.
 src/.env

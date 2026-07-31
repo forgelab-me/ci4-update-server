@@ -98,7 +98,7 @@
                                 accept=".zip,application/zip" required>
                             <div class="form-text">
                                 <i class="bi bi-info-circle me-1"></i>
-                                The <code>manifest.json</code> is read automatically from inside the ZIP — version and file hashes are extracted from it.
+                                The <code>manifest.json</code> is read automatically from inside the ZIP — version, covered directories and file hashes are extracted from it.
                             </div>
                         </div>
                         <div class="col-12">
@@ -138,6 +138,7 @@
                     <thead>
                         <tr>
                             <th>Version</th>
+                            <th>Covers</th>
                             <th>Date</th>
                             <th>Changelog</th>
                             <th class="text-center">Status</th>
@@ -148,6 +149,16 @@
                         <?php foreach ($releases as $r): ?>
                         <tr>
                             <td><code><?= esc($r['version']) ?></code></td>
+                            <td class="small">
+                                <?php if (! empty($r['roots'])): ?>
+                                    <?php // An app refuses a release covering a directory it hasn't
+                                          // listed in Config\Updater::$allowedRoots, so it is worth
+                                          // seeing before pointing an installation at it. ?>
+                                    <span class="text-muted"><?= esc($r['roots']) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted" title="Built before ci4-updater 2.6, which is when a release started declaring its scope.">—</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-muted small"><?= esc($r['released_at'] ?? '—') ?></td>
                             <td class="text-muted small"
                                 style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"

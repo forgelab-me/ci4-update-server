@@ -75,7 +75,7 @@ final class ZipManifestTest extends CIUnitTestCase
         $manifest = $this->readManifest($zip);
 
         $this->assertIsArray($manifest);
-        $this->assertSame('1.2.0', $manifest['version']);
+        $this->assertSame('1.2.0', $manifest['data']['version']);
     }
 
     /**
@@ -91,7 +91,28 @@ final class ZipManifestTest extends CIUnitTestCase
         $manifest = $this->readManifest($zip);
 
         $this->assertIsArray($manifest);
-        $this->assertSame('2.0.0', $manifest['version']);
+        $this->assertSame('2.0.0', $manifest['data']['version']);
+    }
+
+    /**
+     * The stored manifest has to be the archive's bytes, not a re-encoding of
+     * the decoded array: a release signature covers exactly those bytes, and
+     * re-serialising changes spacing, key order and escaping enough to make
+     * the signature stop matching.
+     */
+    public function testTheExactBytesAreKeptAlongsideTheDecodedManifest(): void
+    {
+        // Deliberately not what json_encode would produce: odd spacing, a
+        // slash that PHP would escape by default, trailing newline.
+        $raw = "{\n  \"version\":\"1.2.0\",\n  \"roots\":[\"app\",\"public\"],\n  \"note\":\"a/b\"\n}\n";
+
+        $zip = $this->makeZip('signed.zip', ['manifest.json' => $raw]);
+
+        $manifest = $this->readManifest($zip);
+
+        $this->assertIsArray($manifest);
+        $this->assertSame($raw, $manifest['raw']);
+        $this->assertSame(['app', 'public'], $manifest['data']['roots']);
     }
 
     public function testReturnsNullWhenThereIsNoManifest(): void

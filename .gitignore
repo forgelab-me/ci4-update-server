@@ -15,6 +15,9 @@
 /src/.env.*
 !/src/.env.example
 
+# Previous dependency trees parked by a swapped-root update (ci4-updater 2.7)
+/src/.updater-swap/
+
 # Local Compose override (build from source instead of pulling the image)
 /compose.override.yaml
 
