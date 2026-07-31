@@ -64,7 +64,32 @@ class ApiController extends BaseController
                 ->setJSON(['error' => 'No latest release found']);
         }
 
-        $base = rtrim(base_url(), '/');
+        $base   = rtrim(base_url(), '/');
+        $latest = $release;
+        $extra  = [];
+
+        // An app tells us where it is with ?from=. Only this server sees the
+        // releases in between, so it is the only side that can say whether
+        // going straight to the newest one steps over something.
+        $from = trim((string) $this->request->getGet('from'));
+        if ($from !== '' && Projects::isSafeVersion($from)) {
+            // A release marked as a required step is served ahead of the
+            // newest one. The app applies it, checks again, and carries on —
+            // walking the path instead of jumping over it.
+            $step = $this->nextRequiredStep((int) $project['id'], $from, $latest);
+
+            if ($step !== null) {
+                $release = $step;
+                $extra   = [
+                    'required_step'  => true,
+                    'latest_version' => $latest['version'],
+                ];
+            }
+
+            // Computed against what is actually being served, so a required
+            // step still reports anything skipped on the way to it.
+            $extra += $this->skipReport((int) $project['id'], $from, $release);
+        }
 
         return $this->response->setJSON([
             'version'      => $release['version'],
@@ -72,8 +97,103 @@ class ApiController extends BaseController
             'date'         => $release['released_at'],
             'zip_url'      => "{$base}/api/{$slug}/files/{$release['version']}/release.zip",
             'manifest_url' => "{$base}/api/{$slug}/files/{$release['version']}/manifest.json",
-        ]);
+        ] + $extra);
     }
+
+    /**
+     * The oldest release marked required that sits strictly between $from and
+     * the newest one, if any.
+     *
+     * Only one is returned: the app applies it, comes back, and is handed the
+     * next. That keeps every response a single well-formed release rather than
+     * a plan the client would have to execute.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function nextRequiredStep(int $projectId, string $from, array $latest): ?array
+    {
+        $candidates = [];
+
+        foreach ($this->releases->getForProject($projectId) as $release) {
+            if (empty($release['required'])) {
+                continue;
+            }
+
+            $version = (string) $release['version'];
+
+            if (version_compare($version, $from, '<=')
+                || version_compare($version, (string) $latest['version'], '>=')) {
+                continue;
+            }
+
+            $candidates[] = $release;
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        usort(
+            $candidates,
+            static fn (array $a, array $b): int => version_compare((string) $a['version'], (string) $b['version'])
+        );
+
+        return $candidates[0];
+    }
+
+    /**
+     * What an app on $from would step over by installing $target directly.
+     *
+     * $target is whatever is actually being served — the newest release, or a
+     * required step standing ahead of it.
+     *
+     * Only directories matter here. A skipped release whose files all live
+     * under something the latest release also covers is harmless: the latest
+     * one rewrites those directories wholesale. A directory the latest release
+     * does *not* cover is another matter — nothing will bring it up to date,
+     * and the app has no way of knowing on its own.
+     *
+     * @return array{skipped_versions: list<string>, missed_roots: list<string>}
+     */
+    private function skipReport(int $projectId, string $from, array $target): array
+    {
+        $targetRoots = Projects::parseRoots($target['roots'] ?? null);
+
+        // A latest release that declares nothing predates ci4-updater 2.6.
+        // Without knowing what it covers, every comparison below would be
+        // guesswork — so we say nothing rather than warn wrongly.
+        if ($targetRoots === []) {
+            return ['skipped_versions' => [], 'missed_roots' => []];
+        }
+
+        $skipped = [];
+        $missed  = [];
+
+        foreach ($this->releases->getForProject($projectId) as $release) {
+            $version = (string) $release['version'];
+
+            if (version_compare($version, $from, '<=')
+                || version_compare($version, (string) $target['version'], '>=')) {
+                continue;
+            }
+
+            $skipped[] = $version;
+
+            foreach (Projects::parseRoots($release['roots'] ?? null) as $root) {
+                if (! in_array($root, $targetRoots, true) && ! in_array($root, $missed, true)) {
+                    $missed[] = $root;
+                }
+            }
+        }
+
+        // Both lists are rendered in a warning, so their order is fixed here
+        // rather than left to however the rows came back from the table.
+        usort($skipped, static fn (string $a, string $b): int => version_compare($a, $b));
+        sort($missed);
+
+        return ['skipped_versions' => $skipped, 'missed_roots' => $missed];
+    }
+
 
     /**
      * GET /api/{slug}/files/{version}/{filename}

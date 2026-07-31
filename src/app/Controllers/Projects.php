@@ -75,6 +75,9 @@ class Projects extends BaseController
             'title'    => $project['name'],
             'project'  => $project,
             'releases' => $this->releases->getForProject($id),
+            // Recomputed each time: which release is newest decides which of
+            // the others have become skippable.
+            'unguarded' => array_column($this->unguardedSteps($id), 'roots', 'version'),
         ]);
     }
 
@@ -209,6 +212,7 @@ class Projects extends BaseController
             'project_id'    => $projectId,
             'version'       => $version,
             'roots'         => self::readRoots($manifest),
+            'required'      => (bool) $this->request->getPost('required') ? 1 : 0,
             'changelog'     => $changelog !== '' ? $changelog : null,
             'zip_path'      => $uploadPath . '/release.zip',
             'manifest_path' => $uploadPath . '/manifest.json',
@@ -222,6 +226,8 @@ class Projects extends BaseController
         }
 
         session()->setFlashdata('success', "Release {$version} uploaded successfully.");
+        $this->flagUnguardedSteps($projectId);
+
         return redirect()->to(site_url("projects/{$projectId}"));
     }
 
@@ -235,7 +241,34 @@ class Projects extends BaseController
         $this->releases->setLatest($releaseId, (int) $release['project_id']);
 
         session()->setFlashdata('success', "Release {$release['version']} set as latest.");
-return redirect()->to(site_url("projects/{$release['project_id']}"));
+
+        // Promoting a release can make an older one skippable that wasn't.
+        $this->flagUnguardedSteps((int) $release['project_id']);
+
+        return redirect()->to(site_url("projects/{$release['project_id']}"));
+    }
+
+    /**
+     * Marks a release as a step apps must walk through, or clears it.
+     *
+     * A required release is served on its own, ahead of anything newer, so an
+     * app updating from further back applies it instead of jumping over it.
+     */
+    public function toggleRequired(int $projectId, int $releaseId): RedirectResponse
+    {
+        $release = $this->releases->find($releaseId);
+        if (! $release || (int) $release['project_id'] !== $projectId) {
+            return redirect()->to(site_url('admin'));
+        }
+
+        $required = empty($release['required']);
+        $this->releases->update($releaseId, ['required' => $required ? 1 : 0]);
+
+        session()->setFlashdata('success', $required
+            ? "Release {$release['version']} is now a required step — apps will apply it before anything newer."
+            : "Release {$release['version']} is no longer a required step.");
+
+        return redirect()->to(site_url("projects/{$projectId}"));
     }
 
     public function deleteRelease(int $projectId, int $releaseId): RedirectResponse
@@ -277,6 +310,111 @@ return redirect()->to(site_url("projects/{$release['project_id']}"));
      * Reads manifest.json from inside a ZIP archive.
      * Handles both flat ZIPs and ZIPs with a single root prefix (e.g. GitHub releases).
      */
+    /**
+     * Splits the stored `roots` column back into directory names.
+     *
+     * @return list<string>
+     */
+    public static function parseRoots(?string $roots): array
+    {
+        if ($roots === null || trim($roots) === '') {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', explode(',', $roots)))));
+    }
+
+    /**
+     * Directories a release covers that the newest one does not.
+     *
+     * This is the reason a release would need to be a required step: an app
+     * jumping straight to the newest release never applies it, and nothing
+     * later will either. Empty when either side declares no scope — archives
+     * built before ci4-updater 2.6 — since there is nothing to compare.
+     *
+     * @return list<string>
+     */
+    public static function unmatchedRoots(?string $releaseRoots, ?string $latestRoots): array
+    {
+        $release = self::parseRoots($releaseRoots);
+        $latest  = self::parseRoots($latestRoots);
+
+        if ($release === [] || $latest === []) {
+            return [];
+        }
+
+        return array_values(array_diff($release, $latest));
+    }
+
+    /**
+     * Releases that ought to be marked as required steps and are not.
+     *
+     * Recomputed rather than stored: it depends on which release is currently
+     * the newest, and that changes every time one is promoted.
+     *
+     * @return list<array{version: string, roots: list<string>}>
+     */
+    private function unguardedSteps(int $projectId): array
+    {
+        $latest = $this->releases->getLatestForProject($projectId);
+        if (! $latest) {
+            return [];
+        }
+
+        $steps = [];
+
+        foreach ($this->releases->getForProject($projectId) as $release) {
+            if (! empty($release['required'])) {
+                continue;
+            }
+
+            // The newest release cannot be skipped, and neither can anything
+            // after it — only what sits before is at risk.
+            if (version_compare((string) $release['version'], (string) $latest['version'], '>=')) {
+                continue;
+            }
+
+            $missed = self::unmatchedRoots($release['roots'] ?? null, $latest['roots'] ?? null);
+
+            if ($missed !== []) {
+                $steps[] = ['version' => (string) $release['version'], 'roots' => $missed];
+            }
+        }
+
+        usort($steps, static fn (array $a, array $b): int => version_compare($a['version'], $b['version']));
+
+        return $steps;
+    }
+
+    /**
+     * Points out releases that are now skippable but shouldn't be.
+     *
+     * Called after anything that changes which release is the newest, because
+     * that is exactly when a previously safe release becomes skippable.
+     */
+    private function flagUnguardedSteps(int $projectId): void
+    {
+        $steps = $this->unguardedSteps($projectId);
+
+        if ($steps === []) {
+            return;
+        }
+
+        $parts = array_map(
+            static fn (array $s): string => 'v' . $s['version'] . ' (' . implode(', ', $s['roots']) . ')',
+            $steps
+        );
+
+        session()->setFlashdata('warning', sprintf(
+            'Apps updating from an older version will now skip %s — %s not covered by the latest release, '
+            . 'so nothing will apply %s. Mark %s as a required step if that matters.',
+            implode(' and ', $parts),
+            count($steps) > 1 ? 'those directories are' : 'that directory is',
+            count($steps) > 1 ? 'them' : 'it',
+            count($steps) > 1 ? 'them' : 'it'
+        ));
+    }
+
     /**
      * @return array{data: array<string, mixed>, raw: string}|null
      *         The decoded manifest and the exact bytes it was decoded from.

@@ -109,6 +109,20 @@
                                     Set as latest immediately
                                 </label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                    name="required" id="requiredStep" value="1">
+                                <label class="form-check-label" for="requiredStep">
+                                    Required step
+                                </label>
+                                <div class="form-text">
+                                    Apps are served this release on its own before any newer one,
+                                    instead of jumping straight to the latest. Use it when a release
+                                    must not be skipped — it ships a directory later ones don't, or a
+                                    migration a later one depends on. You'll be prompted after upload
+                                    if the covered directories suggest it.
+                                </div>
+                            </div>
                         </div>
                         <div class="col-12">
                             <button type="submit" class="btn btn-success">
@@ -170,7 +184,21 @@
                                     <span class="badge bg-success">
                                         <i class="bi bi-star-fill me-1"></i>Latest
                                     </span>
-                                <?php else: ?>
+                                <?php endif; ?>
+
+                                <?php if (! empty($r['required'])): ?>
+                                    <span class="badge bg-primary"
+                                          title="Apps are served this release on its own, before anything newer.">
+                                        <i class="bi bi-signpost-split me-1"></i>Required step
+                                    </span>
+                                <?php elseif (isset($unguarded[$r['version']])): ?>
+                                    <?php // Suggested, not enforced: only you know whether skipping
+                                          // this release actually matters for your app. ?>
+                                    <span class="badge bg-warning text-dark"
+                                          title="This release covers <?= esc(implode(', ', $unguarded[$r['version']])) ?>, which the latest one does not. An app updating from further back skips it, and nothing else will apply it.">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Skippable
+                                    </span>
+                                <?php elseif (! $r['is_latest']): ?>
                                     <span class="text-muted small">—</span>
                                 <?php endif; ?>
                             </td>
@@ -187,6 +215,17 @@
                                         </button>
                                     </form>
                                     <?php endif; ?>
+                                    <form method="POST"
+                                        action="<?= site_url("projects/{$project['id']}/releases/{$r['id']}/required") ?>">
+                                        <?= csrf_field() ?>
+                                        <button type="submit"
+                                            class="btn btn-sm <?= empty($r['required']) ? 'btn-outline-primary' : 'btn-primary' ?>"
+                                            title="<?= empty($r['required'])
+                                                ? 'Serve this release on its own before anything newer'
+                                                : 'Stop treating this release as a required step' ?>">
+                                            <i class="bi bi-signpost-split me-1"></i><?= empty($r['required']) ? 'Require' : 'Unrequire' ?>
+                                        </button>
+                                    </form>
                                     <form method="POST"
                                         action="<?= site_url("projects/{$project['id']}/releases/{$r['id']}/delete") ?>"
                                         onsubmit="return confirm('Delete release <?= esc($r['version'], 'js') ?>? This cannot be undone.')">
