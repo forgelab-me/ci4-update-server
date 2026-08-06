@@ -34,6 +34,7 @@ $routes->group('projects', ['filter' => 'admin'], static function (RouteCollecti
     $routes->post('(:num)/delete',        'Projects::delete/$1');
     $routes->post('(:num)/releases',      'Projects::uploadRelease/$1');
     $routes->post('(:num)/releases/(:num)/set-latest',    'Projects::setLatest/$1/$2');
+    $routes->post('(:num)/releases/(:num)/required',      'Projects::toggleRequired/$1/$2');
     $routes->post('(:num)/releases/(:num)/delete',        'Projects::deleteRelease/$1/$2');
 });
 

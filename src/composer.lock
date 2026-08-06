@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "88f13786b91c0ca9568dd090fe8e1889",
+    "content-hash": "0a01a5677ffee633aaced8d400b5da05",
     "packages": [
         {
             "name": "codeigniter4/framework",
@@ -85,16 +85,16 @@
         },
         {
             "name": "codeigniter4/settings",
-            "version": "v2.3.0",
+            "version": "v2.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/codeigniter4/settings.git",
-                "reference": "f0cd3e2453683323d7feeaaee05987dbeb32fa74"
+                "reference": "7cbd2e2146e32211cc8194d9c35632631500adad"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/codeigniter4/settings/zipball/f0cd3e2453683323d7feeaaee05987dbeb32fa74",
-                "reference": "f0cd3e2453683323d7feeaaee05987dbeb32fa74",
+                "url": "https://api.github.com/repos/codeigniter4/settings/zipball/7cbd2e2146e32211cc8194d9c35632631500adad",
+                "reference": "7cbd2e2146e32211cc8194d9c35632631500adad",
                 "shasum": ""
             },
             "require": {
@@ -133,9 +133,9 @@
             ],
             "support": {
                 "issues": "https://github.com/codeigniter4/settings/issues",
-                "source": "https://github.com/codeigniter4/settings/tree/v2.3.0"
+                "source": "https://github.com/codeigniter4/settings/tree/v2.4.0"
             },
-            "time": "2026-02-15T08:22:36+00:00"
+            "time": "2026-07-30T16:03:46+00:00"
         },
         {
             "name": "codeigniter4/shield",
@@ -211,16 +211,16 @@
         },
         {
             "name": "forgelab-me/ci4-updater",
-            "version": "v2.7.0",
+            "version": "v2.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/forgelab-me/ci4-updater.git",
-                "reference": "66cc6bf695dc803a5d22e1cefb754d7beef0e38d"
+                "reference": "733a8b4134d6208e9cb20f1ce68e565cd1394a33"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/forgelab-me/ci4-updater/zipball/66cc6bf695dc803a5d22e1cefb754d7beef0e38d",
-                "reference": "66cc6bf695dc803a5d22e1cefb754d7beef0e38d",
+                "url": "https://api.github.com/repos/forgelab-me/ci4-updater/zipball/733a8b4134d6208e9cb20f1ce68e565cd1394a33",
+                "reference": "733a8b4134d6208e9cb20f1ce68e565cd1394a33",
                 "shasum": ""
             },
             "require": {
@@ -265,7 +265,7 @@
                 "issues": "https://github.com/forgelab-me/ci4-updater/issues",
                 "source": "https://github.com/forgelab-me/ci4-updater"
             },
-            "time": "2026-07-31T03:29:43+00:00"
+            "time": "2026-07-31T14:59:09+00:00"
         },
         {
             "name": "laminas/laminas-escaper",

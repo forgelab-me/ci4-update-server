@@ -121,8 +121,21 @@ From the dashboard (`/admin`):
    or under a single top-level folder like GitHub's auto-generated
    archives — both are detected automatically). Add a changelog and release
    date, and optionally mark it as the latest release right away.
+
+   The version and the directories the release covers are read from the
+   manifest; the latter show in a **Covers** column. A release that ships
+   `vendor/` is much larger, and is refused by any app that hasn't listed
+   `vendor` in its `Config\Updater::$allowedRoots`.
 3. **Set latest** — any uploaded release can be (re)promoted to "latest"
    from the project page, independently of upload order.
+4. **Required step** — mark a release apps must not jump over, and it is
+   served on its own until they have applied it. Worth it when a release
+   ships a directory later ones don't, or a migration a later one depends on.
+
+   The page suggests it: a release covering something the latest one doesn't
+   gets a **Skippable** badge, and uploading or promoting a release says so
+   outright — that is when an older one becomes skippable. Ticking the box
+   stays your call.
 
 ## Connecting an app
 
@@ -156,6 +169,44 @@ GET /api/{slug}/latest.json
   "manifest_url": "https://updates.example.com/api/my-app/files/1.2.0/manifest.json"
 }
 ```
+
+Add `?from={installed version}` and the response also reports what installing
+the latest release directly would step over:
+
+```
+GET /api/{slug}/latest.json?from=1.1.0
+```
+```json
+{
+  "version": "1.4.0",
+  "skipped_versions": ["1.2.0", "1.3.0"],
+  "missed_roots": ["vendor"]
+}
+```
+
+`missed_roots` lists directories a skipped release covered that this one does
+not — they would be left behind, since the latest release never touches them.
+Empty in the usual case where every release covers the same directories.
+`ci4-updater` sends this parameter on its own and shows the warning in its
+update panel; without it, the response keeps exactly the shape above.
+
+A release marked **Required step** on the project page goes further: it is
+served *instead of* the newest one until it has been applied, so an app walks
+through it rather than jumping over it.
+
+```json
+{
+  "version": "1.2.0",
+  "zip_url": "https://updates.example.com/api/my-app/files/1.2.0/release.zip",
+  "required_step": true,
+  "latest_version": "1.4.0"
+}
+```
+
+The app applies 1.2.0, checks again, and is handed the next step or the latest
+release. The project page suggests the checkbox — a *Skippable* badge — on any
+release covering a directory the newest one doesn't; ticking it stays your
+call.
 
 ```
 GET /api/{slug}/files/{version}/release.zip

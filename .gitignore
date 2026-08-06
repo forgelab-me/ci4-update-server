@@ -25,6 +25,7 @@
 /src/writable/backups/*
 /src/writable/cache/*
 /src/writable/debugbar/*
+/src/writable/keys/*
 /src/writable/logs/*
 /src/writable/session/*
 /src/writable/tmp/*

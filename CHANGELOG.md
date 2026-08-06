@@ -9,6 +9,51 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.4.0] - 2026-07-31
+
+### Added
+
+- **`GET /api/{slug}/latest.json?from={version}`** now reports what installing
+  the latest release directly would step over: `skipped_versions`, and
+  `missed_roots` — the directories a skipped release covered that the latest
+  one does not, so nothing will bring them up to date.
+
+  Only this server can work that out; an app sees one release at a time.
+  `ci4-updater` 2.8 sends the parameter on its own and shows the warning in its
+  update panel.
+
+  Without the parameter the response keeps exactly the keys it always had, so
+  nothing already deployed changes.
+
+- **Required steps.** A checkbox on each release, and an action on the project
+  page. A required release is served *instead of* the newest one until it has
+  been applied, so an app updating from further back walks through it rather
+  than jumping over it. It advances one step per check, which keeps every
+  response a single well-formed release instead of a plan the app would have
+  to execute.
+
+  Use it when a release must not be skipped: it ships a directory later ones
+  don't, or a migration a later one depends on.
+
+- **The project page suggests it.** A release covering a directory the newest
+  one does not gets a *Skippable* badge, and uploading or promoting a release
+  says so outright — that is the moment an older release becomes skippable.
+  It only ever suggests: whether it matters is a judgement about the
+  application, not something this server can settle.
+
+### Notes
+
+- Serving all of this needs nothing from `forgelab-me/ci4-updater`: the
+  requirement stays `^2.7`. It is the *receiving* side that reads the new
+  fields, so this server's own update panel starts showing them once it moves
+  to 2.8 — the apps it serves get them as soon as they do.
+
+### Upgrading
+
+Deploy as usual, then run `php spark migrate --all` from `src/` — one new
+column on `releases`, defaulting to off. No release becomes a required step
+until you tick it.
+
 ## [1.3.0] - 2026-07-31
 
 Brings in ci4-updater 2.6 → 2.7, where a release started declaring the
