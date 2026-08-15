@@ -39,7 +39,9 @@
         .copy-btn { cursor: pointer; opacity: .5; transition: opacity .15s; }
         .copy-btn:hover { opacity: 1; }
 
-        footer { border-top: 1px solid #21262d; color: #8b949e; font-size: .85rem; }
+        footer { border-top: 1px solid #21262d; color: #6e7681; font-size: .8125rem; }
+        footer a { color: #8b949e; text-decoration: none; }
+        footer a:hover { color: #79c0ff; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -217,9 +219,16 @@
 </section>
 <?php endif; ?>
 
+<?php // This page is public: no version number here either. ?>
 <footer class="py-4 mt-2">
-    <div class="container text-center">
-        Self-hosted Update Server &mdash; <a href="<?= site_url('dashboard') ?>" class="text-secondary">Dashboard</a>
+    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>&copy; <?= date('Y') ?> ForgeLab &mdash; MIT</span>
+        <span class="d-flex flex-wrap gap-3">
+            <a href="https://github.com/forgelab-me/ci4-update-server" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github me-1"></i>forgelab-me/ci4-update-server
+            </a>
+            <a href="<?= site_url('dashboard') ?>">Dashboard</a>
+        </span>
     </div>
 </footer>
 

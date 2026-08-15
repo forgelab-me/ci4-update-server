@@ -10,7 +10,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <?= $this->renderSection('head') ?>
     <style>
-        body { background-color: #0d1117; min-height: 100vh; }
+        /* Column layout so the footer sits at the bottom on short pages
+           (the login screen) without floating over long ones. */
+        body { background-color: #0d1117; min-height: 100vh; display: flex; flex-direction: column; }
+        main { flex: 1 0 auto; }
+        .site-footer { border-top: 1px solid #30363d; color: #6e7681; font-size: .8125rem; }
+        .site-footer a { color: #8b949e; text-decoration: none; }
+        .site-footer a:hover { color: #79c0ff; text-decoration: underline; }
         .navbar { border-bottom: 1px solid #30363d; }
         .card { border-color: #30363d; }
         .card-header { border-color: #30363d; background-color: rgba(255,255,255,.03); }
@@ -76,6 +82,18 @@
 
     <?= $this->renderSection('content') ?>
 </main>
+
+<?php // Deliberately no version number: this layout is also used by the login
+      // page, and announcing the running version to anyone who reaches it
+      // saves an attacker the trouble of finding out. ?>
+<footer class="site-footer py-3 mt-5">
+    <div class="container d-flex flex-wrap justify-content-between gap-2">
+        <span>&copy; <?= date('Y') ?> ForgeLab — MIT</span>
+        <a href="https://github.com/forgelab-me/ci4-update-server" target="_blank" rel="noopener noreferrer">
+            <i class="bi bi-github me-1"></i>forgelab-me/ci4-update-server
+        </a>
+    </div>
+</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <?= $this->renderSection('scripts') ?>

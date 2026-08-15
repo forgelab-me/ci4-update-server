@@ -9,6 +9,19 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.4.1] - 2026-08-07
+
+### Added
+
+- A footer carrying the copyright and a link back to the project on GitHub, on
+  the admin pages and on the public landing page — the two share no layout, so
+  both were done.
+
+  Deliberately without a version number. The admin layout also renders the
+  login screen, and the landing page is public: announcing the running version
+  to anyone who reaches either saves an attacker the trouble of finding out. It
+  stays where it belongs, on the authenticated update panel.
+
 ## [1.4.0] - 2026-07-31
 
 ### Added
