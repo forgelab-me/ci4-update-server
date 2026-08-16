@@ -226,6 +226,10 @@ class ApiController extends BaseController
             return $this->response->setStatusCode(404)->setBody('File not found');
         }
 
+        if ($filename === 'release.zip') {
+            $this->releases->recordDownload((int) $release['id']);
+        }
+
         $mime = $filename === 'release.zip' ? 'application/zip' : 'application/json';
 
         return $this->response

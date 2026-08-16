@@ -69,6 +69,7 @@ class Admin extends BaseController
             'projectCount' => $projects->countAll(),
             'releaseCount' => $releases->countAll(),
             'projects'     => $projects->withReleasesCount(),
+            'downloads'    => $releases->downloadTotals(),
         ]);
     }
 

@@ -25,6 +25,12 @@
             <div class="text-muted small mt-1"><i class="bi bi-tag me-1"></i>Releases</div>
         </div>
     </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center py-3">
+            <div class="display-5 fw-bold text-info"><?= number_format(array_sum($downloads)) ?></div>
+            <div class="text-muted small mt-1"><i class="bi bi-download me-1"></i>Downloads</div>
+        </div>
+    </div>
 </div>
 
 <?php if (empty($projects)): ?>
@@ -43,6 +49,7 @@
                     <th>Project</th>
                     <th>Slug</th>
                     <th class="text-center">Releases</th>
+                    <th class="text-end">Downloads</th>
                     <th>Latest Version</th>
                     <th class="text-center">Access</th>
                     <th></th>
@@ -55,6 +62,10 @@
                     <td><code><?= esc($p['slug']) ?></code></td>
                     <td class="text-center">
                         <span class="badge bg-secondary"><?= (int) $p['releases_count'] ?></span>
+                    </td>
+                    <td class="text-end font-monospace small">
+                        <?php $dl = (int) ($downloads[$p['id']] ?? 0); ?>
+                        <span class="<?= $dl > 0 ? 'text-light' : 'text-muted' ?>"><?= number_format($dl) ?></span>
                     </td>
                     <td>
                         <?php if ($p['latest_version']): ?>

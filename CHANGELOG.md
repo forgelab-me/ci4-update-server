@@ -9,6 +9,32 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.5.0] - 2026-08-07
+
+### Added
+
+- **Download counts, per release and per project.** Shown on the project page
+  next to each version, with the project total in the Releases header, and as
+  a column plus a headline figure on the dashboard.
+
+  Counted per release; a project's figure is the sum of its releases rather
+  than a second stored counter, so the two can never drift apart when a
+  release is deleted.
+
+  Only `release.zip` counts. `manifest.json` is fetched to decide whether to
+  update at all, so counting it would report checks as installs. Requests
+  refused for a missing token, or for a version that doesn't exist, count for
+  nothing.
+
+  The figures are not exposed publicly: neither the landing page nor
+  `latest.json` carries them.
+
+### Upgrading
+
+Deploy as usual, then run `php spark migrate --all` from `src/` — one new
+column on `releases`, starting at zero. Downloads served before this release
+were never recorded and cannot be recovered.
+
 ## [1.4.1] - 2026-08-07
 
 ### Added

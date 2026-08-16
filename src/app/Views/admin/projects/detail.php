@@ -140,7 +140,16 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-tags-fill me-2"></i>Releases</span>
-                <span class="badge bg-secondary"><?= count($releases) ?></span>
+                <span class="d-flex align-items-center gap-2">
+                    <?php $totalDl = array_sum(array_map(static fn ($r) => (int) ($r['downloads'] ?? 0), $releases)); ?>
+                    <?php if ($totalDl > 0): ?>
+                        <span class="badge bg-dark border border-secondary text-secondary"
+                              title="Total across every version of this project">
+                            <i class="bi bi-download me-1"></i><?= number_format($totalDl) ?>
+                        </span>
+                    <?php endif; ?>
+                    <span class="badge bg-secondary"><?= count($releases) ?></span>
+                </span>
             </div>
             <?php if (empty($releases)): ?>
                 <div class="card-body text-center text-muted py-4">
@@ -153,6 +162,7 @@
                         <tr>
                             <th>Version</th>
                             <th>Covers</th>
+                            <th class="text-end">Downloads</th>
                             <th>Date</th>
                             <th>Changelog</th>
                             <th class="text-center">Status</th>
@@ -171,6 +181,14 @@
                                     <span class="text-muted"><?= esc($r['roots']) ?></span>
                                 <?php else: ?>
                                     <span class="text-muted" title="Built before ci4-updater 2.6, which is when a release started declaring its scope.">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-end font-monospace small">
+                                <?php $dl = (int) ($r['downloads'] ?? 0); ?>
+                                <?php if ($dl > 0): ?>
+                                    <span class="text-light" title="release.zip served <?= $dl ?> time<?= $dl > 1 ? 's' : '' ?>"><?= number_format($dl) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted">0</span>
                                 <?php endif; ?>
                             </td>
                             <td class="text-muted small"><?= esc($r['released_at'] ?? '—') ?></td>

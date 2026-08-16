@@ -47,4 +47,37 @@ class ReleaseModel extends Model
             ->where('version', $version)
             ->first();
     }
+
+    /**
+     * Records one download of a release archive.
+     */
+    public function recordDownload(int $releaseId): void
+    {
+        $this->db->table('releases')
+            ->where('id', $releaseId)
+            ->set('downloads', 'downloads + 1', false)
+            ->update();
+    }
+
+    /**
+     * Total downloads per project, keyed by project id.
+     *
+     * @return array<int, int>
+     */
+    public function downloadTotals(): array
+    {
+        $rows = $this->db->table('releases')
+            ->select('project_id, SUM(downloads) AS total')
+            ->groupBy('project_id')
+            ->get()
+            ->getResultArray();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $totals[(int) $row['project_id']] = (int) $row['total'];
+        }
+
+        return $totals;
+    }
 }
