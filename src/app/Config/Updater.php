@@ -12,9 +12,9 @@ use Forgelabme\Ci4Updater\Config\Updater as BaseUpdater;
  */
 class Updater extends BaseUpdater
 {
-    public const VERSION = '1.5.0';
+    public const VERSION = '1.6.0';
 
-    public const DATE = '2026-08-07';
+    public const DATE = '2026-08-17';
 
     public const USER_AGENT = 'UpdateServerAdmin/1.0';
 
@@ -23,6 +23,13 @@ class Updater extends BaseUpdater
 
     public ?string $appName = 'Update Server';
 
+    public array $allowedRoots = ['app', 'public', 'vendor'];
+
     // Reuse the app's own app_settings table instead of a JSON file in writable/.
     public string $settingsClass = \App\Models\AppSettingModel::class;
+
+    // List a public key here to require signed releases: from then on an
+    // unsigned release is refused. Generate a pair with
+    // `php spark updater:keygen` — see the package's docs/signing.md.
+    public array $publicKeys = [APPPATH . 'Config/Keys/release-signing.pub'];
 }

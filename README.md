@@ -126,6 +126,9 @@ From the dashboard (`/admin`):
    manifest; the latter show in a **Covers** column. A release that ships
    `vendor/` is much larger, and is refused by any app that hasn't listed
    `vendor` in its `Config\Updater::$allowedRoots`.
+
+   A version already uploaded is refused rather than overwritten: an app that
+   downloaded it must never get different files under the same name.
 3. **Set latest** — any uploaded release can be (re)promoted to "latest"
    from the project page, independently of upload order.
 4. **Required step** — mark a release apps must not jump over, and it is
@@ -215,6 +218,29 @@ GET /api/{slug}/files/{version}/manifest.json
 
 Both stream the file directly — `writable/uploads/` itself is never exposed.
 
+## Publishing from CI
+
+A pipeline can upload a release instead of the panel form. Two ways to get a
+credential, one endpoint to use it:
+
+- **A publish token** — created on the project page, scoped `publish:{slug}`,
+  optionally with an expiry. One secret in the workflow.
+- **Trusted Publishing** — no stored secret. GitHub mints an identity token for
+  the workflow, the server checks it against a trusted publisher pinned on the
+  repository *and* the numeric account id, and hands back a 15-minute publish
+  token.
+
+```
+POST /api/{slug}/publish/token    Authorization: Bearer <GitHub OIDC token>
+POST /api/{slug}/releases         Authorization: Bearer <publish token>
+```
+
+Publishing this way never promotes a release to latest, and a version that
+already exists is refused rather than overwritten.
+
+See **[Publishing from CI](docs/publishing.md)** for the workflow YAML, and for
+the question that matters more than either option: where the signing key lives.
+
 ## Security
 
 - The admin panel (`/admin/*`) is authenticated via
@@ -224,6 +250,9 @@ Both stream the file directly — `writable/uploads/` itself is never exposed.
 - Give each project a token (`Projects → regenerate token`) unless the
   release is genuinely meant to be public. Tokens are checked with
   `hash_equals()` against the `Authorization: Bearer` header.
+- Publish credentials are Shield access tokens: stored hashed, scoped to one
+  project, and expiring per token. They can add a release but never promote
+  one — see [Publishing from CI](docs/publishing.md).
 - Serve this over HTTPS. Every app pointed at it treats its response as
   trusted — see the
   [Security section of ci4-updater](https://github.com/forgelab-me/ci4-updater#security)

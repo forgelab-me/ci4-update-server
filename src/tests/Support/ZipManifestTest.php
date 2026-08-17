@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Controllers\Projects;
+use App\Libraries\ReleaseIngestor;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
@@ -10,22 +10,19 @@ use CodeIgniter\Test\CIUnitTestCase;
  * found whether it sits at the archive root or under a single top-level
  * folder (the shape GitHub's auto-generated archives have).
  *
- * readManifestFromZip()/detectZipPrefix() are private, so they're reached
- * through CIUnitTestCase's invoker rather than by widening their visibility
- * just for tests.
+ * They live on ReleaseIngestor, which the admin form and the publish API both
+ * go through — the two must read an archive identically.
  *
  * @internal
  */
 final class ZipManifestTest extends CIUnitTestCase
 {
     private string $tmpDir;
-    private Projects $controller;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->controller = new Projects();
         $this->tmpDir     = sys_get_temp_dir() . '/ci4us-zip-' . bin2hex(random_bytes(4));
         mkdir($this->tmpDir, 0777, true);
     }
@@ -61,7 +58,7 @@ final class ZipManifestTest extends CIUnitTestCase
 
     private function readManifest(string $zipPath): ?array
     {
-        return $this->getPrivateMethodInvoker($this->controller, 'readManifestFromZip')($zipPath);
+        return ReleaseIngestor::readManifestFromZip($zipPath);
     }
 
     public function testReadsManifestAtTheArchiveRoot(): void
@@ -155,7 +152,7 @@ final class ZipManifestTest extends CIUnitTestCase
 
         $archive = new ZipArchive();
         $archive->open($zip);
-        $prefix = $this->getPrivateMethodInvoker($this->controller, 'detectZipPrefix')($archive);
+        $prefix = ReleaseIngestor::detectZipPrefix($archive);
         $archive->close();
 
         $this->assertSame('', $prefix);
@@ -170,7 +167,7 @@ final class ZipManifestTest extends CIUnitTestCase
 
         $archive = new ZipArchive();
         $archive->open($zip);
-        $prefix = $this->getPrivateMethodInvoker($this->controller, 'detectZipPrefix')($archive);
+        $prefix = ReleaseIngestor::detectZipPrefix($archive);
         $archive->close();
 
         $this->assertSame('my-release/', $prefix);

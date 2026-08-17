@@ -265,6 +265,136 @@
         </div>
     </div>
 
+    <?php /* Publishing from CI */ ?>
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-robot me-2"></i>Publishing from CI
+            </div>
+            <div class="card-body">
+
+                <?php if ($raw = session()->getFlashdata('new_publish_token')): ?>
+                    <div class="alert alert-success">
+                        <div class="fw-semibold mb-1"><i class="bi bi-key me-1"></i>Copy this token now — it is never shown again.</div>
+                        <code class="d-block p-2 rounded" style="background:rgba(0,0,0,.35);word-break:break-all"><?= esc($raw) ?></code>
+                    </div>
+                <?php endif; ?>
+
+                <p class="text-muted small">
+                    Both routes end at the same place: a token scoped
+                    <code><?= esc($publishScope) ?></code> that may upload a release here.
+                    Uploading never promotes to <em>latest</em> — that stays a click on this page.
+                </p>
+
+                <h6 class="mt-4">Tokens</h6>
+                <?php if (empty($publishTokens)): ?>
+                    <p class="text-muted small mb-3">None yet.</p>
+                <?php else: ?>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>Name</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+                            <tbody>
+                            <?php foreach ($publishTokens as $tk): ?>
+                                <tr>
+                                    <td><?= esc($tk['name']) ?></td>
+                                    <td class="small <?= $tk['expired'] ? 'text-danger' : 'text-muted' ?>">
+                                        <?= $tk['expires'] ? esc($tk['expires']) . ($tk['expired'] ? ' (expired)' : '') : 'never' ?>
+                                    </td>
+                                    <td class="small text-muted"><?= esc($tk['last_used_at'] ?? 'never') ?></td>
+                                    <td class="text-end">
+                                        <form method="POST" action="<?= site_url('projects/' . $project['id'] . '/publish-tokens/' . $tk['id'] . '/revoke') ?>"
+                                              onsubmit="return confirm('Revoke this token? Any pipeline using it stops publishing.')">
+                                            <?= csrf_field() ?>
+                                            <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" action="<?= site_url('projects/' . $project['id'] . '/publish-tokens') ?>" class="row g-2 align-items-end mb-4">
+                    <?= csrf_field() ?>
+                    <div class="col-sm-5">
+                        <label class="form-label small">Name</label>
+                        <input name="name" class="form-control form-control-sm" placeholder="GitHub Actions">
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small">Expires in (days, blank = never)</label>
+                        <input name="expires_days" type="number" min="1" class="form-control form-control-sm" placeholder="90">
+                    </div>
+                    <div class="col-sm-3">
+                        <button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg me-1"></i>Create token</button>
+                    </div>
+                </form>
+
+                <h6>Trusted publishers <span class="badge bg-secondary ms-1">no stored secret</span></h6>
+                <p class="text-muted small">
+                    A GitHub workflow proves who it is with the identity token GitHub mints for it, and gets a
+                    15-minute token in exchange. It must request the audience
+                    <code><?= esc($oidcAudience) ?></code>.
+                </p>
+
+                <?php if (! empty($publishers)): ?>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>Repository</th><th>Owner id</th><th>Environment</th><th>Last used</th><th></th></tr></thead>
+                            <tbody>
+                            <?php foreach ($publishers as $pb): ?>
+                                <tr>
+                                    <td class="font-monospace small"><?= esc($pb['repository']) ?></td>
+                                    <td class="font-monospace small text-muted"><?= esc($pb['repository_owner_id']) ?></td>
+                                    <td class="small">
+                                        <?php if ($pb['environment']): ?>
+                                            <?= esc($pb['environment']) ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">any</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="small text-muted"><?= esc($pb['last_used_at'] ?? 'never') ?></td>
+                                    <td class="text-end">
+                                        <form method="POST" action="<?= site_url('projects/' . $project['id'] . '/publishers/' . $pb['id'] . '/delete') ?>"
+                                              onsubmit="return confirm('Remove this publisher?')">
+                                            <?= csrf_field() ?>
+                                            <button class="btn btn-sm btn-outline-danger">Remove</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+
+                <?php /* align-items-start, not -end: the hints below some inputs would otherwise push their column up. */ ?>
+                <form method="POST" action="<?= site_url('projects/' . $project['id'] . '/publishers') ?>" class="row g-2 align-items-start">
+                    <?= csrf_field() ?>
+                    <div class="col-sm-4">
+                        <label class="form-label small">Repository</label>
+                        <input name="repository" class="form-control form-control-sm" placeholder="forgelab-me/my-app" required>
+                        <div class="form-text" style="font-size:.75rem">owner/repo</div>
+                    </div>
+                    <div class="col-sm-3">
+                        <label class="form-label small">Owner id</label>
+                        <input name="repository_owner_id" class="form-control form-control-sm" placeholder="10387667" required>
+                        <div class="form-text" style="font-size:.75rem">api.github.com/users/&lt;owner&gt;</div>
+                    </div>
+                    <div class="col-sm-3">
+                        <label class="form-label small">Environment</label>
+                        <input name="environment" class="form-control form-control-sm" placeholder="release">
+                        <div class="form-text" style="font-size:.75rem">blank = any</div>
+                    </div>
+                    <div class="col-sm-2">
+                        <label class="form-label small d-none d-sm-inline-block">&nbsp;</label>
+                        <button class="btn btn-sm btn-success w-100">Trust</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <?php /* API info */ ?>
     <div class="col-12">
         <div class="card">

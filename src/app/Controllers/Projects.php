@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\PublishTokens;
+use App\Libraries\ReleaseIngestor;
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
+use App\Models\TrustedPublisherModel;
+use CodeIgniter\I18n\Time;
 use CodeIgniter\HTTP\RedirectResponse;
 
 class Projects extends BaseController
@@ -78,6 +82,10 @@ class Projects extends BaseController
             // Recomputed each time: which release is newest decides which of
             // the others have become skippable.
             'unguarded' => array_column($this->unguardedSteps($id), 'roots', 'version'),
+            'publishScope'   => 'publish:' . $project['slug'],
+            'publishTokens'  => PublishTokens::withScope('publish:' . $project['slug']),
+            'publishers'     => (new TrustedPublisherModel())->forProject($id),
+            'oidcAudience'   => rtrim(base_url(), '/'),
         ]);
     }
 
@@ -150,83 +158,131 @@ class Projects extends BaseController
             return redirect()->to(site_url('admin'));
         }
 
-        $changelog  = trim((string) $this->request->getPost('changelog'));
-        $releasedAt = (string) ($this->request->getPost('released_at') ?: date('Y-m-d'));
-        $setLatest  = (bool) $this->request->getPost('set_latest');
-
         $zipFile = $this->request->getFile('zip_file');
 
-        if (! $zipFile || ! $zipFile->isValid() || $zipFile->hasMoved()) {
+        if (! $zipFile) {
             session()->setFlashdata('error', 'A valid ZIP file is required.');
-            return redirect()->to(site_url("projects/{$projectId}"));
-        }
-        if (strtolower($zipFile->getClientExtension()) !== 'zip') {
-            session()->setFlashdata('error', 'ZIP file must have a .zip extension.');
-            return redirect()->to(site_url("projects/{$projectId}"));
-        }
-        if ($zipFile->getSize() > self::MAX_RELEASE_BYTES) {
-            session()->setFlashdata('error', sprintf(
-                'Release archive is too large (%.1f MB); the limit is %d MB.',
-                $zipFile->getSize() / 1048576,
-                (int) (self::MAX_RELEASE_BYTES / 1048576)
-            ));
+
             return redirect()->to(site_url("projects/{$projectId}"));
         }
 
-        $read = $this->readManifestFromZip($zipFile->getTempName());
-        if ($read === null) {
-            session()->setFlashdata('error', 'No manifest.json found inside the ZIP. Make sure it is included at the root of the archive.');
+        // Same path as the publish API, so the two cannot drift.
+        $result = (new ReleaseIngestor($this->releases))->ingest($project, $zipFile, [
+            'changelog'   => trim((string) $this->request->getPost('changelog')),
+            'released_at' => (string) ($this->request->getPost('released_at') ?: date('Y-m-d')),
+            'required'    => (bool) $this->request->getPost('required'),
+            'set_latest'  => (bool) $this->request->getPost('set_latest'),
+        ]);
+
+        if (! $result['success']) {
+            session()->setFlashdata('error', $result['error']);
+
             return redirect()->to(site_url("projects/{$projectId}"));
         }
 
-        $manifest = $read['data'];
-
-        if (empty($manifest['version'])) {
-            session()->setFlashdata('error', 'manifest.json inside the ZIP must have a "version" field.');
-            return redirect()->to(site_url("projects/{$projectId}"));
-        }
-
-        $version = trim((string) $manifest['version']);
-
-        // The version comes from manifest.json *inside* the uploaded archive and
-        // is used as a directory name, so it has to be constrained before it
-        // touches the filesystem — otherwise "../../public" escapes writable/.
-        if (! self::isSafeVersion($version)) {
-            session()->setFlashdata('error', 'Invalid version in manifest.json: only letters, digits, dots, hyphens and underscores are allowed (max 20 characters).');
-            return redirect()->to(site_url("projects/{$projectId}"));
-        }
-
-        $uploadPath = WRITEPATH . 'uploads/' . $project['slug'] . '/' . $version;
-
-        if (! is_dir($uploadPath)) {
-            mkdir($uploadPath, 0755, true);
-        }
-
-        $zipFile->move($uploadPath, 'release.zip', true);
-
-        // The bytes from the archive, verbatim. Re-encoding would produce a
-        // manifest that no longer matches its signature.
-        file_put_contents($uploadPath . '/manifest.json', $read['raw']);
-
-        $releaseId = $this->releases->insert([
-            'project_id'    => $projectId,
-            'version'       => $version,
-            'roots'         => self::readRoots($manifest),
-            'required'      => (bool) $this->request->getPost('required') ? 1 : 0,
-            'changelog'     => $changelog !== '' ? $changelog : null,
-            'zip_path'      => $uploadPath . '/release.zip',
-            'manifest_path' => $uploadPath . '/manifest.json',
-            'is_latest'     => 0,
-            'released_at'   => $releasedAt,
-            'created_at'    => date('Y-m-d H:i:s'),
-        ], true);
-
-        if ($setLatest) {
-            $this->releases->setLatest((int) $releaseId, $projectId);
-        }
-
-        session()->setFlashdata('success', "Release {$version} uploaded successfully.");
+        session()->setFlashdata('success', "Release {$result['version']} uploaded successfully.");
         $this->flagUnguardedSteps($projectId);
+
+        return redirect()->to(site_url("projects/{$projectId}"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Publishing from CI
+    // -------------------------------------------------------------------------
+
+    /**
+     * Issues a token scoped to this project and nothing else.
+     *
+     * Shown once. Shield stores only a SHA-256, so there is no second chance
+     * and no database leak that hands anyone the ability to publish.
+     */
+    public function createPublishToken(int $projectId): RedirectResponse
+    {
+        $project = $this->projects->find($projectId);
+        if (! $project) {
+            return redirect()->to(site_url('admin'));
+        }
+
+        $days  = (int) $this->request->getPost('expires_days');
+        $token = auth()->user()->generateAccessToken(
+            trim((string) $this->request->getPost('name')) ?: 'CI',
+            ['publish:' . $project['slug']],
+            $days > 0 ? Time::now()->addDays($days) : null
+        );
+
+        session()->setFlashdata('new_publish_token', $token->raw_token);
+        session()->setFlashdata('success', 'Token created. Copy it now — it cannot be shown again.');
+
+        return redirect()->to(site_url("projects/{$projectId}"));
+    }
+
+    public function revokePublishToken(int $projectId, int $tokenId): RedirectResponse
+    {
+        $project = $this->projects->find($projectId);
+        if (! $project) {
+            return redirect()->to(site_url('admin'));
+        }
+
+        $done = PublishTokens::revoke($tokenId, 'publish:' . $project['slug']);
+
+        session()->setFlashdata($done ? 'success' : 'error',
+            $done ? 'Token revoked.' : 'That token does not belong to this project.');
+
+        return redirect()->to(site_url("projects/{$projectId}"));
+    }
+
+    /**
+     * Trusts a GitHub workflow to publish here without a stored secret.
+     */
+    public function addPublisher(int $projectId): RedirectResponse
+    {
+        $project = $this->projects->find($projectId);
+        if (! $project) {
+            return redirect()->to(site_url('admin'));
+        }
+
+        $repository = trim((string) $this->request->getPost('repository'));
+        $ownerId    = trim((string) $this->request->getPost('repository_owner_id'));
+        $env        = trim((string) $this->request->getPost('environment'));
+
+        if (preg_match('#\A[\w.-]+/[\w.-]+\z#', $repository) !== 1) {
+            session()->setFlashdata('error', 'Repository must look like owner/name.');
+
+            return redirect()->to(site_url("projects/{$projectId}"));
+        }
+
+        // The numeric account id is what the match is really pinned on, so a
+        // typo here silently means "nothing will ever authenticate".
+        if (preg_match('/\A\d+\z/', $ownerId) !== 1) {
+            session()->setFlashdata('error', 'Owner id must be the numeric GitHub account id — see https://api.github.com/users/<owner>.');
+
+            return redirect()->to(site_url("projects/{$projectId}"));
+        }
+
+        (new TrustedPublisherModel())->insert([
+            'project_id'          => $projectId,
+            'user_id'             => auth()->id(),
+            'provider'            => 'github',
+            'repository'          => $repository,
+            'repository_owner_id' => $ownerId,
+            'environment'         => $env !== '' ? $env : null,
+            'created_at'          => date('Y-m-d H:i:s'),
+        ]);
+
+        session()->setFlashdata('success', "{$repository} can now publish to this project.");
+
+        return redirect()->to(site_url("projects/{$projectId}"));
+    }
+
+    public function deletePublisher(int $projectId, int $publisherId): RedirectResponse
+    {
+        $publishers = new TrustedPublisherModel();
+        $row        = $publishers->find($publisherId);
+
+        if ($row !== null && (int) $row['project_id'] === $projectId) {
+            $publishers->delete($publisherId);
+            session()->setFlashdata('success', 'Trusted publisher removed.');
+        }
 
         return redirect()->to(site_url("projects/{$projectId}"));
     }
@@ -415,38 +471,6 @@ class Projects extends BaseController
         ));
     }
 
-    /**
-     * @return array{data: array<string, mixed>, raw: string}|null
-     *         The decoded manifest and the exact bytes it was decoded from.
-     *         Both matter: a release signature covers those bytes, so the copy
-     *         this server serves has to be the original and not a re-encoding.
-     */
-    private function readManifestFromZip(string $zipPath): ?array
-    {
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath) !== true) {
-            return null;
-        }
-
-        $content = $zip->getFromName('manifest.json');
-
-        if ($content === false) {
-            $prefix  = $this->detectZipPrefix($zip);
-            $content = $prefix !== '' ? $zip->getFromName($prefix . 'manifest.json') : false;
-        }
-
-        $zip->close();
-
-        if ($content === false) {
-            return null;
-        }
-
-        $data = json_decode($content, true);
-
-        return (is_array($data) && json_last_error() === JSON_ERROR_NONE)
-            ? ['data' => $data, 'raw' => $content]
-            : null;
-    }
 
     /**
      * The directories a release covers, as declared in its manifest.
@@ -478,25 +502,6 @@ class Projects extends BaseController
         return $joined === '' ? null : mb_substr($joined, 0, 255);
     }
 
-    private function detectZipPrefix(\ZipArchive $zip): string
-    {
-        $commonPrefix = null;
-
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            if ($name === false || strpos($name, '/') === false) {
-                return '';
-            }
-            $segment = substr($name, 0, strpos($name, '/') + 1);
-            if ($commonPrefix === null) {
-                $commonPrefix = $segment;
-            } elseif ($commonPrefix !== $segment) {
-                return '';
-            }
-        }
-
-        return $commonPrefix ?? '';
-    }
 
     private function deleteReleaseFiles(array $release): void
     {

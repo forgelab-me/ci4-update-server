@@ -9,6 +9,58 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.6.0] - 2026-08-17
+
+### Added
+
+- **Publishing a release from CI**, two ways in, one door out: a token scoped
+  `publish:{slug}`, or Trusted Publishing, which exchanges the identity token
+  GitHub mints for a workflow against one of those tokens, valid 15 minutes.
+  The upload endpoint only ever sees a scoped token, so Trusted Publishing is a
+  way of *obtaining* the credential, not a second way of using it.
+
+  ```
+  POST /api/{slug}/publish/token    Authorization: Bearer <GitHub OIDC token>
+  POST /api/{slug}/releases         Authorization: Bearer <publish token>
+  ```
+
+  Both are managed on the project page. See [docs/publishing.md](docs/publishing.md).
+
+- Tokens are **Shield access tokens**, not a mechanism of our own: Shield
+  already stores them hashed, scopes them, and expires them per token.
+
+- Trusted publishers are pinned on the **numeric GitHub account id**, not just
+  the repository name. A name can be renamed, or freed and claimed by someone
+  else; an account id is never reassigned. An `environment` can be required,
+  which is what puts a protected environment's approval between a push and a
+  publish — worth it especially when the signing key lives in CI.
+
+### Changed
+
+- **Publishing through the API never promotes a release to latest**, whatever
+  the caller sends. Promotion stays a click in the panel, so a stolen publish
+  credential can only add a release nobody is served. The panel's own upload
+  form keeps its checkbox — a human is already deciding there.
+
+- **A version that already exists is refused** rather than overwritten. Before,
+  re-uploading a version overwrote its files and inserted a second row with the
+  same number. Published bytes have to be immutable: an app that already
+  downloaded a version must never get different files under the same name.
+  This affects the admin form too.
+
+- The admin form and the publish API now share one ingestion path, so the
+  version validation that keeps an archive from writing outside
+  `writable/uploads`, the verbatim manifest bytes a signature depends on, and
+  the recorded scope cannot drift between them.
+
+### Upgrading
+
+Deploy as usual, then run `php spark migrate --all` from `src/` — one new table
+for trusted publishers. Nothing publishes until you create a token or add a
+publisher. Requires `firebase/php-jwt`, added as a dependency: Shield's own JWT
+addon signs for *your* users with *your* keys and cannot verify a third party's
+token against a remote JWKS.
+
 ## [1.5.0] - 2026-08-07
 
 ### Added

@@ -36,11 +36,20 @@ $routes->group('projects', ['filter' => 'admin'], static function (RouteCollecti
     $routes->post('(:num)/releases/(:num)/set-latest',    'Projects::setLatest/$1/$2');
     $routes->post('(:num)/releases/(:num)/required',      'Projects::toggleRequired/$1/$2');
     $routes->post('(:num)/releases/(:num)/delete',        'Projects::deleteRelease/$1/$2');
+    $routes->post('(:num)/publish-tokens',                'Projects::createPublishToken/$1');
+    $routes->post('(:num)/publish-tokens/(:num)/revoke',  'Projects::revokePublishToken/$1/$2');
+    $routes->post('(:num)/publishers',                    'Projects::addPublisher/$1');
+    $routes->post('(:num)/publishers/(:num)/delete',      'Projects::deletePublisher/$1/$2');
 });
 
 // -------------------------------------------------------------------------
 // Public API — token validated inside the controller
 // -------------------------------------------------------------------------
+// Publishing from CI. The exchange endpoint authenticates a GitHub identity
+// token itself; the upload sits behind Shield's access-token filter.
+$routes->post('api/(:segment)/publish/token',                  'PublishController::mintToken/$1');
+$routes->post('api/(:segment)/releases',                       'PublishController::upload/$1', ['filter' => 'tokens']);
+
 $routes->get('api/(:segment)/latest.json',                     'ApiController::latest/$1');
 $routes->get('api/(:segment)/files/(:segment)/(:segment)',     'ApiController::file/$1/$2/$3');
 
