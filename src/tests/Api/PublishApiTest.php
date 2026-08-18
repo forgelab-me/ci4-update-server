@@ -294,6 +294,61 @@ final class PublishApiTest extends CIUnitTestCase
         self::assertSame([], (new ReleaseModel())->getForProject($other));
     }
 
+    /**
+     * A refusal has to name its cause. A release archive shipping vendor/ is
+     * large enough to hit PHP's own limits, and an upload stopped there looks
+     * exactly like a corrupt archive from the outside.
+     */
+    public function testAnUploadRefusedByPhpSaysWhy(): void
+    {
+        $id  = $this->makeProject();
+        $zip = $this->zipWith('1.4.0');
+
+        $tooBig = new \CodeIgniter\HTTP\Files\UploadedFile(
+            $zip,
+            'release.zip',
+            'application/zip',
+            filesize($zip),
+            UPLOAD_ERR_INI_SIZE
+        );
+
+        $result = (new \App\Libraries\ReleaseIngestor(new ReleaseModel()))->ingest(
+            (new ProjectModel())->find($id),
+            $tooBig,
+            []
+        );
+
+        self::assertFalse($result['success']);
+        self::assertStringContainsString('upload_max_filesize', $result['error']);
+    }
+
+    /**
+     * post_max_size exceeded, or a proxy that rewrote the request: the field is
+     * there but PHP never registered an upload.
+     */
+    public function testAnUploadThatNeverArrivedSaysSo(): void
+    {
+        $id  = $this->makeProject();
+        $zip = $this->zipWith('1.4.0');
+
+        $notAnUpload = new \CodeIgniter\HTTP\Files\UploadedFile(
+            $zip,
+            'release.zip',
+            'application/zip',
+            filesize($zip),
+            UPLOAD_ERR_OK
+        );
+
+        $result = (new \App\Libraries\ReleaseIngestor(new ReleaseModel()))->ingest(
+            (new ProjectModel())->find($id),
+            $notAnUpload,
+            []
+        );
+
+        self::assertFalse($result['success']);
+        self::assertStringContainsString('post_max_size', $result['error']);
+    }
+
     private function zipWith(string $version): string
     {
         $dir = WRITEPATH . 'tmp/pub-' . bin2hex(random_bytes(4));

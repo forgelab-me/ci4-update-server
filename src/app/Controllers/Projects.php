@@ -161,7 +161,7 @@ class Projects extends BaseController
         $zipFile = $this->request->getFile('zip_file');
 
         if (! $zipFile) {
-            session()->setFlashdata('error', 'A valid ZIP file is required.');
+            session()->setFlashdata('error', 'A valid ZIP file is required. If the archive is large, check post_max_size — PHP drops the entire upload once it is exceeded.');
 
             return redirect()->to(site_url("projects/{$projectId}"));
         }

@@ -9,6 +9,25 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.6.1] - 2026-08-18
+
+### Fixed
+
+- **A refused upload now says why.** Both the panel and the publish API
+  answered *A valid ZIP file is required* whether the archive was malformed,
+  larger than PHP's `upload_max_filesize`, or dropped whole because it exceeded
+  `post_max_size`. Only the first of those is about the archive, and it is the
+  least likely: a release shipping `vendor/` is the first upload big enough to
+  meet those limits, so the message sent you inspecting a file that was fine.
+
+  Each case is now named, `upload_max_filesize` and `post_max_size` included,
+  so the setting to change is in the message itself.
+
+### Upgrading
+
+Nothing to do beyond deploying. Covers `app/` only — the dependencies have not
+moved since 1.6.0.
+
 ## [1.6.0] - 2026-08-17
 
 ### Added
@@ -55,11 +74,16 @@ instances see in their update panel.
 
 ### Upgrading
 
-Deploy as usual, then run `php spark migrate --all` from `src/` — one new table
-for trusted publishers. Nothing publishes until you create a token or add a
-publisher. Requires `firebase/php-jwt`, added as a dependency: Shield's own JWT
-addon signs for *your* users with *your* keys and cannot verify a third party's
-token against a remote JWKS.
+This release adds a dependency, `firebase/php-jwt` — Shield's own JWT addon
+signs for *your* users with *your* keys and cannot verify a third party's token
+against a remote JWKS. So `vendor/` has to arrive with it: a release covering
+only `app/` and `public/` installs code that calls a class the server does not
+have, and Trusted Publishing answers `Class "Firebase\JWT\JWT" not found`.
+Either apply a release scoped `app,public,vendor`, or run `composer install
+--no-dev` on the server yourself.
+
+Then run `php spark migrate --all` from `src/` — one new table for trusted
+publishers. Nothing publishes until you create a token or add a publisher.
 
 ## [1.5.0] - 2026-08-07
 

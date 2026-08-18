@@ -130,7 +130,7 @@ class PublishController extends BaseController
 
         $zip = $this->request->getFile('zip_file');
         if (! $zip) {
-            return $this->fail(400, 'Send the archive as multipart field "zip_file".');
+            return $this->fail(400, 'Send the archive as multipart field "zip_file". If it was sent, PHP dropped it: check post_max_size on the server.');
         }
 
         $result = (new ReleaseIngestor(new ReleaseModel()))->ingest($project, $zip, self::uploadMeta([

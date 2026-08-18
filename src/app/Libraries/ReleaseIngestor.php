@@ -41,8 +41,14 @@ final class ReleaseIngestor
      */
     public function ingest(array $project, UploadedFile $zip, array $meta = []): array
     {
-        if (! $zip->isValid() || $zip->hasMoved()) {
+        if ($zip->hasMoved()) {
             return ['success' => false, 'error' => 'A valid ZIP file is required.'];
+        }
+
+        if (! $zip->isValid()) {
+            return ['success' => false, 'error' => $zip->getError() !== UPLOAD_ERR_OK
+                ? 'The upload did not arrive intact: ' . $zip->getErrorString()
+                : 'The upload did not arrive as a file. It was likely cut short by post_max_size, or rewritten on the way in.'];
         }
 
         if (strtolower($zip->getClientExtension()) !== 'zip') {
