@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
 use App\Models\TrustedPublisherModel;
+use App\Libraries\PublishTokens;
+use CodeIgniter\I18n\Time;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
@@ -347,6 +349,159 @@ final class PublishApiTest extends CIUnitTestCase
 
         self::assertFalse($result['success']);
         self::assertStringContainsString('post_max_size', $result['error']);
+    }
+
+    // -- Expired tokens --------------------------------------------------------
+
+    /**
+     * Shield refuses an expired token but never deletes it, and Trusted
+     * Publishing mints one per workflow run. Left alone they bury the
+     * long-lived tokens an admin actually needs to find and revoke.
+     */
+    public function testMintingClearsOutTheExpiredTokensItLeftBehind(): void
+    {
+        $user = $this->ciUser();
+
+        $user->generateAccessToken('run 41', ['publish:my-app'], Time::now()->subMinutes(30));
+        $user->generateAccessToken('run 42', ['publish:my-app'], Time::now()->subMinutes(5));
+        $user->generateAccessToken('laptop', ['publish:my-app']);
+        $user->generateAccessToken('other project', ['publish:other-app'], Time::now()->subMinutes(5));
+
+        self::assertSame(2, PublishTokens::purgeExpired('publish:my-app'));
+
+        // The one without an expiry stays: expired is not the same as unused.
+        self::assertSame(['laptop'], array_column(PublishTokens::withScope('publish:my-app'), 'name'));
+
+        // And another project's expired token is none of our business.
+        self::assertCount(1, PublishTokens::withScope('publish:other-app'));
+    }
+
+    public function testPurgingLeavesTokensThatHaveNotExpiredYet(): void
+    {
+        $user = $this->ciUser();
+        $user->generateAccessToken('long run', ['publish:my-app'], Time::now()->addMinutes(15));
+
+        self::assertSame(0, PublishTokens::purgeExpired('publish:my-app'));
+        self::assertCount(1, PublishTokens::withScope('publish:my-app'));
+    }
+
+    /**
+     * The whole exchange, end to end: a token signed by a key the server
+     * fetches from GitHub's JWKS, a matching trusted publisher, and a scoped
+     * credential coming back — with the previous run's dead token swept up on
+     * the way through.
+     */
+    public function testAWorkflowGetsAScopedTokenAndTheDeadOnesGo(): void
+    {
+        $id   = $this->makeProject();
+        $user = $this->ciUser();
+        $this->publisher($id, ['user_id' => $user->id]);
+
+        $stale = $user->generateAccessToken('run 41', ['publish:my-app'], Time::now()->subMinutes(30));
+
+        $r = $this->withHeaders(['Authorization' => 'Bearer ' . $this->githubToken()])
+            ->call('post', 'api/my-app/publish/token');
+
+        $r->assertStatus(200);
+
+        $body = json_decode($r->getJSON(), true);
+        self::assertSame('publish:my-app', $body['scope']);
+        self::assertSame(900, $body['expires_in']);
+        self::assertNotEmpty($body['token']);
+
+        $live = PublishTokens::withScope('publish:my-app');
+        self::assertCount(1, $live, 'the expired token from the previous run is gone');
+        self::assertNotSame('run 41', $live[0]['name']);
+        self::assertNull((new \CodeIgniter\Shield\Models\UserIdentityModel())->find($stale->id));
+    }
+
+    public function testATokenMintedForAnotherAudienceIsRefused(): void
+    {
+        $id   = $this->makeProject();
+        $user = $this->ciUser();
+        $this->publisher($id, ['user_id' => $user->id]);
+
+        $jwt = $this->githubToken(['aud' => 'https://someone-elses-server.example.com']);
+
+        $r = $this->withHeaders(['Authorization' => 'Bearer ' . $jwt])
+            ->call('post', 'api/my-app/publish/token');
+
+        $r->assertStatus(401);
+        self::assertStringContainsString('different audience', $r->getJSON());
+    }
+
+    /**
+     * A signature from any other key is worthless, however well-formed the
+     * claims are.
+     */
+    public function testATokenSignedByAnotherKeyIsRefused(): void
+    {
+        $id   = $this->makeProject();
+        $user = $this->ciUser();
+        $this->publisher($id, ['user_id' => $user->id]);
+
+        $impostor = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($impostor, $pem);
+
+        $jwt = \Firebase\JWT\JWT::encode($this->githubClaims(), $pem, 'RS256', 'github-test-key');
+
+        $r = $this->withHeaders(['Authorization' => 'Bearer ' . $jwt])
+            ->call('post', 'api/my-app/publish/token');
+
+        $r->assertStatus(401);
+    }
+
+    private function ciUser(): \CodeIgniter\Shield\Entities\User
+    {
+        $users = new \CodeIgniter\Shield\Models\UserModel();
+        $users->save(new \CodeIgniter\Shield\Entities\User([
+            'username' => 'ci' . bin2hex(random_bytes(3)),
+            'email'    => bin2hex(random_bytes(4)) . '@example.com',
+            'password' => 'sup3r-s3cret-pass',
+        ]));
+
+        return $users->findById($users->getInsertID());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function githubClaims(array $over = []): array
+    {
+        return array_merge([
+            'iss'                 => \App\Libraries\GithubOidc::ISSUER,
+            'aud'                 => rtrim(base_url(), '/'),
+            'sub'                 => 'repo:forgelab-me/my-app:ref:refs/tags/v1.0.0',
+            'repository'          => 'forgelab-me/my-app',
+            'repository_owner_id' => '10387667',
+            'environment'         => '',
+            'iat'                 => time() - 10,
+            'exp'                 => time() + 300,
+        ], $over);
+    }
+
+    /**
+     * A token GitHub would have signed — except the key is ours, and the JWKS
+     * the server would fetch is seeded into its cache.
+     */
+    private function githubToken(array $over = []): string
+    {
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($key, $pem);
+        $details = openssl_pkey_get_details($key);
+
+        $b64u = static fn (string $bin): string => rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+
+        service('cache')->save('github_oidc_jwks', ['keys' => [[
+            'kty' => 'RSA',
+            'kid' => 'github-test-key',
+            'use' => 'sig',
+            'alg' => 'RS256',
+            'n'   => $b64u($details['rsa']['n']),
+            'e'   => $b64u($details['rsa']['e']),
+        ]]], 60);
+
+        return \Firebase\JWT\JWT::encode($this->githubClaims($over), $pem, 'RS256', 'github-test-key');
     }
 
     private function zipWith(string $version): string

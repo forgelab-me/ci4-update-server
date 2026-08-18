@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Libraries\GithubOidc;
+use App\Libraries\PublishTokens;
 use App\Libraries\ReleaseIngestor;
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
@@ -92,6 +93,10 @@ class PublishController extends BaseController
         if ($user === null) {
             return $this->fail(403, 'The account that trusted this publisher no longer exists.');
         }
+
+        // One token per run would otherwise pile up forever: Shield stops
+        // honouring an expired token but never deletes it.
+        PublishTokens::purgeExpired($this->scope($slug));
 
         $token = $user->generateAccessToken(
             'ci: ' . (string) ($result['claims']['repository'] ?? 'github'),

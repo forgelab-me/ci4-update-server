@@ -53,6 +53,46 @@ final class PublishTokens
     }
 
     /**
+     * Deletes the already-expired tokens carrying $scope, and says how many.
+     *
+     * Shield refuses an expired token but never removes it, and Trusted
+     * Publishing mints one per workflow run — so without this the panel fills
+     * with dead entries and the long-lived tokens worth revoking get lost among
+     * them. Called when minting, which is exactly where the growth happens, so
+     * no scheduled job has to exist for it.
+     *
+     * Scoped on purpose: it must never reach a token belonging to another
+     * project.
+     */
+    public static function purgeExpired(string $scope): int
+    {
+        $db = db_connect();
+
+        $rows = $db->table('auth_identities')
+            ->select('id, extra')
+            ->where('type', AccessTokens::ID_TYPE_ACCESS_TOKEN)
+            ->where('expires <', date('Y-m-d H:i:s'))
+            ->get()
+            ->getResultArray();
+
+        $ids = [];
+
+        foreach ($rows as $row) {
+            if (in_array($scope, self::scopesOf($row), true)) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        $db->table('auth_identities')->whereIn('id', $ids)->delete();
+
+        return count($ids);
+    }
+
+    /**
      * Deletes a token, but only if it really carries $scope.
      *
      * The id arrives from a form post, and without this check a crafted one

@@ -9,6 +9,28 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.6.2] - 2026-08-18
+
+### Fixed
+
+- **Expired publish tokens are now cleared out.** Shield stops honouring a
+  token past its expiry but never deletes it, and Trusted Publishing mints one
+  per workflow run — so the project page filled with dead entries, and the
+  long-lived tokens worth finding and revoking got lost among them.
+
+  Minting now deletes the expired tokens of that project first. That is where
+  the growth happens, so nothing has to be scheduled, and the sweep is scoped
+  to the project: another project's tokens are never touched.
+
+  Expiry and revocation stay different things. A token with no expiry date is
+  left alone — Shield still refuses one unused for longer than
+  `unusedTokenLifetime`, a year by default.
+
+### Upgrading
+
+Nothing to do beyond deploying. Covers `app/` only. Expired tokens already in
+the table go on the next mint.
+
 ## [1.6.1] - 2026-08-18
 
 ### Fixed
