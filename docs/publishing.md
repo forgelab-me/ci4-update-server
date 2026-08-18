@@ -121,6 +121,13 @@ requires that same environment. The signing key and its passphrase are held as
 environment secrets, so the approval that gates the environment gates the key
 too — which is the point, since the key lives in CI here.
 
+## Where the checking happens
+
+Verifying the identity token, and matching it against a trusted publisher, come
+from [`forgelab-me/ci4-trusted-publishing`](https://github.com/forgelab-me/ci4-trusted-publishing) —
+shared with the other applications built on the same mechanism, so a fix lands
+once. What stays here is what a publish credential is allowed to do.
+
 ## The endpoints
 
 ```

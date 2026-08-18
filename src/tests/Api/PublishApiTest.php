@@ -5,11 +5,14 @@ declare(strict_types=1);
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
 use App\Models\TrustedPublisherModel;
-use App\Libraries\PublishTokens;
 use CodeIgniter\I18n\Time;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
+use Forgelabme\TrustedPublishing\Identity;
+use Forgelabme\TrustedPublishing\Jwks\CachedJwks;
+use Forgelabme\TrustedPublishing\Providers\GithubActions;
+use Forgelabme\TrustedPublishing\ScopedTokens;
 
 /**
  * Publishing a release from CI.
@@ -57,13 +60,15 @@ final class PublishApiTest extends CIUnitTestCase
      *
      * @return array<string, mixed>
      */
-    private function claims(array $over = []): array
+    private function identity(array $over = []): Identity
     {
-        return array_merge([
+        $claims = array_merge([
             'repository'          => 'forgelab-me/my-app',
             'repository_owner_id' => '10387667',
             'environment'         => '',
         ], $over);
+
+        return new Identity('github', $claims['repository'], $claims['repository_owner_id'], $claims['environment']);
     }
 
     public function testAMatchingWorkflowIsRecognised(): void
@@ -71,7 +76,7 @@ final class PublishApiTest extends CIUnitTestCase
         $id = $this->makeProject();
         $this->publisher($id);
 
-        self::assertNotNull((new TrustedPublisherModel())->match($id, $this->claims()));
+        self::assertNotNull((new TrustedPublisherModel())->match($id, $this->identity()));
     }
 
     /**
@@ -84,7 +89,7 @@ final class PublishApiTest extends CIUnitTestCase
         $id = $this->makeProject();
         $this->publisher($id);
 
-        $impostor = $this->claims(['repository_owner_id' => '999999']);
+        $impostor = $this->identity(['repository_owner_id' => '999999']);
 
         self::assertNull((new TrustedPublisherModel())->match($id, $impostor));
     }
@@ -94,7 +99,7 @@ final class PublishApiTest extends CIUnitTestCase
         $id = $this->makeProject();
         $this->publisher($id);
 
-        self::assertNull((new TrustedPublisherModel())->match($id, $this->claims([
+        self::assertNull((new TrustedPublisherModel())->match($id, $this->identity([
             'repository' => 'forgelab-me/some-other-repo',
         ])));
     }
@@ -110,9 +115,9 @@ final class PublishApiTest extends CIUnitTestCase
 
         $publishers = new TrustedPublisherModel();
 
-        self::assertNull($publishers->match($id, $this->claims()), 'no environment presented');
-        self::assertNull($publishers->match($id, $this->claims(['environment' => 'staging'])));
-        self::assertNotNull($publishers->match($id, $this->claims(['environment' => 'release'])));
+        self::assertNull($publishers->match($id, $this->identity()), 'no environment presented');
+        self::assertNull($publishers->match($id, $this->identity(['environment' => 'staging'])));
+        self::assertNotNull($publishers->match($id, $this->identity(['environment' => 'release'])));
     }
 
     public function testAPublisherOfAnotherProjectDoesNotMatch(): void
@@ -121,7 +126,7 @@ final class PublishApiTest extends CIUnitTestCase
         $theirs = $this->makeProject('other-app');
         $this->publisher($theirs);
 
-        self::assertNull((new TrustedPublisherModel())->match($mine, $this->claims()));
+        self::assertNull((new TrustedPublisherModel())->match($mine, $this->identity()));
     }
 
     public function testClaimsWithoutARepositoryNeverMatch(): void
@@ -131,8 +136,8 @@ final class PublishApiTest extends CIUnitTestCase
 
         $publishers = new TrustedPublisherModel();
 
-        self::assertNull($publishers->match($id, $this->claims(['repository' => ''])));
-        self::assertNull($publishers->match($id, $this->claims(['repository_owner_id' => ''])));
+        self::assertNull($publishers->match($id, $this->identity(['repository' => ''])));
+        self::assertNull($publishers->match($id, $this->identity(['repository_owner_id' => ''])));
     }
 
     // -- The exchange endpoint -------------------------------------------------
@@ -367,13 +372,13 @@ final class PublishApiTest extends CIUnitTestCase
         $user->generateAccessToken('laptop', ['publish:my-app']);
         $user->generateAccessToken('other project', ['publish:other-app'], Time::now()->subMinutes(5));
 
-        self::assertSame(2, PublishTokens::purgeExpired('publish:my-app'));
+        self::assertSame(2, ScopedTokens::purgeExpired('publish:my-app'));
 
         // The one without an expiry stays: expired is not the same as unused.
-        self::assertSame(['laptop'], array_column(PublishTokens::withScope('publish:my-app'), 'name'));
+        self::assertSame(['laptop'], array_column(ScopedTokens::withScope('publish:my-app'), 'name'));
 
         // And another project's expired token is none of our business.
-        self::assertCount(1, PublishTokens::withScope('publish:other-app'));
+        self::assertCount(1, ScopedTokens::withScope('publish:other-app'));
     }
 
     public function testPurgingLeavesTokensThatHaveNotExpiredYet(): void
@@ -381,8 +386,8 @@ final class PublishApiTest extends CIUnitTestCase
         $user = $this->ciUser();
         $user->generateAccessToken('long run', ['publish:my-app'], Time::now()->addMinutes(15));
 
-        self::assertSame(0, PublishTokens::purgeExpired('publish:my-app'));
-        self::assertCount(1, PublishTokens::withScope('publish:my-app'));
+        self::assertSame(0, ScopedTokens::purgeExpired('publish:my-app'));
+        self::assertCount(1, ScopedTokens::withScope('publish:my-app'));
     }
 
     /**
@@ -409,7 +414,7 @@ final class PublishApiTest extends CIUnitTestCase
         self::assertSame(900, $body['expires_in']);
         self::assertNotEmpty($body['token']);
 
-        $live = PublishTokens::withScope('publish:my-app');
+        $live = ScopedTokens::withScope('publish:my-app');
         self::assertCount(1, $live, 'the expired token from the previous run is gone');
         self::assertNotSame('run 41', $live[0]['name']);
         self::assertNull((new \CodeIgniter\Shield\Models\UserIdentityModel())->find($stale->id));
@@ -469,7 +474,7 @@ final class PublishApiTest extends CIUnitTestCase
     private function githubClaims(array $over = []): array
     {
         return array_merge([
-            'iss'                 => \App\Libraries\GithubOidc::ISSUER,
+            'iss'                 => GithubActions::ISSUER,
             'aud'                 => rtrim(base_url(), '/'),
             'sub'                 => 'repo:forgelab-me/my-app:ref:refs/tags/v1.0.0',
             'repository'          => 'forgelab-me/my-app',
@@ -492,7 +497,9 @@ final class PublishApiTest extends CIUnitTestCase
 
         $b64u = static fn (string $bin): string => rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
 
-        service('cache')->save('github_oidc_jwks', ['keys' => [[
+        // Seeded where the package would have cached what it fetched from
+        // GitHub, so the real verification path runs against our own key.
+        service('cache')->save(CachedJwks::cacheKey(new GithubActions()), ['keys' => [[
             'kty' => 'RSA',
             'kid' => 'github-test-key',
             'use' => 'sig',

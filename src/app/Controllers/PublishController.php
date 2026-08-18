@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Libraries\GithubOidc;
-use App\Libraries\PublishTokens;
 use App\Libraries\ReleaseIngestor;
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
 use App\Models\TrustedPublisherModel;
 use CodeIgniter\HTTP\ResponseInterface;
-use CodeIgniter\I18n\Time;
 use CodeIgniter\Shield\Models\UserModel;
+use Config\TrustedPublishing;
+use Forgelabme\TrustedPublishing\ScopedTokens;
+use Forgelabme\TrustedPublishing\Verifier;
 
 /**
  * Publishing a release from CI.
@@ -48,7 +48,7 @@ class PublishController extends BaseController
      */
     public static function audience(): string
     {
-        return rtrim(base_url(), '/');
+        return config(TrustedPublishing::class)->audience();
     }
 
     /**
@@ -68,13 +68,14 @@ class PublishController extends BaseController
             return $this->fail(401, 'Send the GitHub OIDC token as: Authorization: Bearer <token>');
         }
 
-        $result = (new GithubOidc(self::audience()))->verify($presented);
-        if (! $result['ok']) {
-            return $this->fail(401, $result['error']);
+        $result = config(TrustedPublishing::class)->verifier('github')->verify($presented);
+        if (! $result->ok) {
+            return $this->fail(401, $result->error);
         }
 
+        $identity   = $result->identity;
         $publishers = new TrustedPublisherModel();
-        $publisher  = $publishers->match((int) $project['id'], $result['claims']);
+        $publisher  = $publishers->match((int) $project['id'], $identity);
 
         if ($publisher === null) {
             // Deliberately says what was presented: the caller already knows
@@ -83,9 +84,9 @@ class PublishController extends BaseController
             return $this->fail(403, sprintf(
                 'No trusted publisher on "%s" matches %s (owner id %s%s). Add it on the project page.',
                 $slug,
-                (string) ($result['claims']['repository'] ?? '?'),
-                (string) ($result['claims']['repository_owner_id'] ?? '?'),
-                ($result['claims']['environment'] ?? '') !== '' ? ', environment ' . $result['claims']['environment'] : ''
+                $identity->repository,
+                $identity->ownerId,
+                $identity->environment !== '' ? ', environment ' . $identity->environment : ''
             ));
         }
 
@@ -96,12 +97,13 @@ class PublishController extends BaseController
 
         // One token per run would otherwise pile up forever: Shield stops
         // honouring an expired token but never deletes it.
-        PublishTokens::purgeExpired($this->scope($slug));
+        ScopedTokens::purgeExpired($this->scope($slug));
 
-        $token = $user->generateAccessToken(
-            'ci: ' . (string) ($result['claims']['repository'] ?? 'github'),
+        $token = ScopedTokens::mint(
+            $user,
+            $identity->describe(),
             [$this->scope($slug)],
-            Time::now()->addMinutes(self::MINTED_TTL_MINUTES)
+            self::MINTED_TTL_MINUTES
         );
 
         $publishers->touch((int) $publisher['id']);
@@ -179,9 +181,7 @@ class PublishController extends BaseController
 
     private function bearer(): string
     {
-        $header = $this->request->getHeaderLine('Authorization');
-
-        return preg_match('/^Bearer\s+(.+)$/i', $header, $m) === 1 ? trim($m[1]) : '';
+        return Verifier::bearer($this->request->getHeaderLine('Authorization'));
     }
 
     private function fail(int $status, string $message): ResponseInterface

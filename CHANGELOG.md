@@ -9,6 +9,41 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.6.3] - 2026-08-18
+
+### Changed
+
+- **Trusted Publishing now comes from
+  [`forgelab-me/ci4-trusted-publishing`](https://github.com/forgelab-me/ci4-trusted-publishing)**
+  rather than from three files kept here. Nothing changes for anyone
+  publishing: same endpoints, same credentials, same answers.
+
+  It moved because a second application grew its own copy of it, and the two
+  had already drifted apart within a day — over trimming whitespace, and over
+  what a refusal says. This is code that verifies a signed statement from a
+  third party, where the traps are `alg: none`, algorithm confusion, a replayed
+  audience and trusting a repository name that can be renamed away from you. It
+  has to be fixed in one place, and adding GitLab CI later has to be done once.
+
+  What stayed here is what belongs here: the `trusted_publishers` table with
+  its cascade to `projects`, what the scope `publish:{slug}` permits, and the
+  panel. The package owns identity; this application owns authorization.
+
+- `firebase/php-jwt` is no longer a direct dependency — it arrives with the
+  package, which is what uses it.
+
+### Upgrading
+
+**This release must ship `vendor/`.** It adds a dependency, and the code
+already deployed would otherwise call classes the server does not have. A
+release scoped `app,public,vendor`, or `composer install --no-dev` on the
+server. The publishing workflow works this out on its own from `composer.lock`,
+and marks the release as a required step.
+
+No migration, no configuration. `app/Config/TrustedPublishing.php` arrives with
+working defaults: the audience stays this server's own base URL, and GitHub
+Actions is the one provider enabled.
+
 ## [1.6.2] - 2026-08-18
 
 ### Fixed

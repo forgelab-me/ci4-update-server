@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Libraries\PublishTokens;
 use App\Libraries\ReleaseIngestor;
 use App\Models\ProjectModel;
 use App\Models\ReleaseModel;
 use App\Models\TrustedPublisherModel;
-use CodeIgniter\I18n\Time;
 use CodeIgniter\HTTP\RedirectResponse;
+use CodeIgniter\I18n\Time;
+use Forgelabme\TrustedPublishing\ScopedTokens;
 
 class Projects extends BaseController
 {
@@ -83,7 +83,7 @@ class Projects extends BaseController
             // the others have become skippable.
             'unguarded' => array_column($this->unguardedSteps($id), 'roots', 'version'),
             'publishScope'   => 'publish:' . $project['slug'],
-            'publishTokens'  => PublishTokens::withScope('publish:' . $project['slug']),
+            'publishTokens'  => ScopedTokens::withScope('publish:' . $project['slug']),
             'publishers'     => (new TrustedPublisherModel())->forProject($id),
             'oidcAudience'   => rtrim(base_url(), '/'),
         ]);
@@ -223,7 +223,7 @@ class Projects extends BaseController
             return redirect()->to(site_url('admin'));
         }
 
-        $done = PublishTokens::revoke($tokenId, 'publish:' . $project['slug']);
+        $done = ScopedTokens::revoke($tokenId, 'publish:' . $project['slug']);
 
         session()->setFlashdata($done ? 'success' : 'error',
             $done ? 'Token revoked.' : 'That token does not belong to this project.');

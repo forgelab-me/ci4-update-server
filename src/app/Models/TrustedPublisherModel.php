@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use CodeIgniter\Model;
+use Forgelabme\TrustedPublishing\Identity;
+use Forgelabme\TrustedPublishing\PublisherMatcher;
 
 class TrustedPublisherModel extends Model
 {
@@ -23,56 +25,21 @@ class TrustedPublisherModel extends Model
     }
 
     /**
-     * The publisher a set of verified OIDC claims matches, or null.
+     * The publisher of this project that a verified identity matches, or null.
      *
-     * The match is pinned on `repository_owner_id`, the numeric account id,
-     * and only then on the name. A name can be renamed or freed and claimed by
-     * someone else; the id is never reassigned. Matching on the name alone
-     * would mean losing the account means losing the project.
-     *
-     * @param array<string, mixed> $claims
+     * The comparison itself lives in forgelab-me/ci4-trusted-publishing, so it
+     * cannot drift from the other applications using the same mechanism. This
+     * model decides only which rows are candidates.
      *
      * @return array<string, mixed>|null
      */
-    public function match(int $projectId, array $claims): ?array
+    public function match(int $projectId, Identity $identity): ?array
     {
-        $repository = (string) ($claims['repository'] ?? '');
-        $ownerId    = (string) ($claims['repository_owner_id'] ?? '');
-        $env        = (string) ($claims['environment'] ?? '');
-
-        if ($repository === '' || $ownerId === '') {
-            return null;
-        }
-
-        foreach ($this->forProject($projectId) as $row) {
-            if (! hash_equals((string) $row['repository_owner_id'], $ownerId)) {
-                continue;
-            }
-
-            if (! hash_equals(strtolower((string) $row['repository']), strtolower($repository))) {
-                continue;
-            }
-
-            // A configured environment is a requirement, not a hint: it is
-            // what lets a protected environment's approval gate stand between
-            // a push and a publish.
-            $required = trim((string) ($row['environment'] ?? ''));
-
-            if ($required !== '' && ! hash_equals($required, $env)) {
-                continue;
-            }
-
-            return $row;
-        }
-
-        return null;
+        return (new PublisherMatcher())->match($this->forProject($projectId), $identity);
     }
 
     public function touch(int $id): void
     {
-        $this->db->table($this->table)
-            ->where('id', $id)
-            ->set('last_used_at', date('Y-m-d H:i:s'))
-            ->update();
+        $this->update($id, ['last_used_at' => date('Y-m-d H:i:s')]);
     }
 }
