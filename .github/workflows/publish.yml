@@ -43,6 +43,10 @@ concurrency: publish-${{ github.ref }}
 env:
   SERVER: https://updates.forgelab.me
   SLUG: update-server
+  # Not decoration: the host in front of updates.forgelab.me answers 403 to any
+  # request whose User-Agent contains "curl", or none at all, and the request
+  # never reaches the application. Send something else and it goes through.
+  UA: 'ci4-update-server-publish (+https://github.com/forgelab-me/ci4-update-server)'
 
 jobs:
   publish:
@@ -181,9 +185,28 @@ jobs:
           OIDC=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SERVER" | jq -r .value)
 
-          TOKEN=$(curl -sS --fail-with-body -X POST \
+          if [ -z "$OIDC" ] || [ "$OIDC" = null ]; then
+            echo "::error::GitHub minted no identity token — check that the job has id-token: write."
+            exit 1
+          fi
+
+          # Status and body kept apart, so a refusal shows what the server
+          # actually said. Piping curl straight into jq turns every failure
+          # into a parse error and loses the message that explains it.
+          STATUS=$(curl -sS -X POST -A "$UA" \
             -H "Authorization: Bearer $OIDC" \
-            "$SERVER/api/$SLUG/publish/token" | jq -r .token)
+            -o "$RUNNER_TEMP/mint.json" -w '%{http_code}' \
+            "$SERVER/api/$SLUG/publish/token")
+
+          if [ "$STATUS" != 200 ]; then
+            echo "::error::the server refused to mint a publish token (HTTP $STATUS)"
+            cat "$RUNNER_TEMP/mint.json"
+            echo
+            exit 1
+          fi
+
+          TOKEN=$(jq -r .token < "$RUNNER_TEMP/mint.json")
+          rm -f "$RUNNER_TEMP/mint.json"
 
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
@@ -195,13 +218,21 @@ jobs:
           REQUIRED: ${{ steps.scope.outputs.required }}
         run: |
           set -eu
-          curl -sS --fail-with-body -X POST \
+          STATUS=$(curl -sS -X POST -A "$UA" \
             -H "Authorization: Bearer $TOKEN" \
             -F "zip_file=@$ZIP" \
             -F "changelog=<$RUNNER_TEMP/changelog.txt" \
             -F "required=$REQUIRED" \
-            "$SERVER/api/$SLUG/releases" | tee "$RUNNER_TEMP/published.json"
+            -o "$RUNNER_TEMP/published.json" -w '%{http_code}' \
+            "$SERVER/api/$SLUG/releases")
+
+          cat "$RUNNER_TEMP/published.json"
           echo
+
+          if [ "$STATUS" != 201 ]; then
+            echo "::error::publishing failed (HTTP $STATUS)"
+            exit 1
+          fi
 
       - name: Summary
         if: success()
