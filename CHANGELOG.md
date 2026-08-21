@@ -9,6 +9,47 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.6.4] - 2026-08-21
+
+### Fixed
+
+- **A crafted `manifest.json` inside a release archive could exhaust server
+  memory.** `readManifestFromZip()` read the entry fully into memory before
+  looking at its size — a small, highly-compressible entry can expand past a
+  gigabyte on extraction. The uncompressed size is now checked with
+  `ZipArchive::statName()` before anything is pulled out, and anything over
+  1MB (generous for a manifest) is refused the same way a missing one is.
+
+  Reachable only by whoever already holds a publish credential — a project's
+  publish token or a trusted GitHub workflow — but that is exactly the
+  boundary Trusted Publishing exists to manage: a compromised CI runner
+  shouldn't be able to take the server down for every project with one
+  upload.
+
+### Added
+
+- **The publish endpoints are now rate-limited.** `POST /api/{slug}/publish/token`
+  and `POST /api/{slug}/releases` were the only unthrottled state-changing
+  routes — Shield's `auth-rates` already covers the login form. Both now allow
+  20 requests per minute per IP; a request past that gets a `429` with a JSON
+  body instead of Shield's redirect, since these are API routes, not forms.
+
+### Changed
+
+- **CSRF cookie and token names are no longer the CodeIgniter tutorial
+  defaults** (`csrf_test_name`, `csrf_cookie_name`), and `tokenRandomize` is
+  on. Neither closes a real hole on its own — the token was already
+  unguessable — but a default name fingerprints the framework for free, and
+  randomization is a no-cost mitigation against BREACH-style compression
+  attacks.
+
+### Upgrading
+
+Nothing to do beyond deploying — no migration, no configuration, and no new
+dependency: this covers `app/` only. Anyone with an admin tab already open
+before the upgrade should reload it once; its form still carries the old CSRF
+field name and would otherwise fail its first submission after the deploy.
+
 ## [1.6.3] - 2026-08-18
 
 ### Changed

@@ -140,6 +140,19 @@ final class ZipManifestTest extends CIUnitTestCase
     }
 
     /**
+     * A manifest.json entry whose uncompressed size blows past the cap is
+     * refused before it is ever extracted — a highly-compressible entry could
+     * otherwise expand to gigabytes in memory (a decompression bomb).
+     */
+    public function testReturnsNullWhenTheManifestIsOversized(): void
+    {
+        $huge = str_repeat('0', 2 * 1024 * 1024); // over MAX_MANIFEST_BYTES, trivially compressible
+        $zip  = $this->makeZip('oversized.zip', ['manifest.json' => $huge]);
+
+        $this->assertNull($this->readManifest($zip));
+    }
+
+    /**
      * Two different top-level folders means there is no common prefix to
      * strip, so the manifest must be looked up at the root only.
      */

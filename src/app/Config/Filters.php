@@ -35,6 +35,7 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'admin'         => \App\Filters\AdminFilter::class,
+        'publish-rates' => \App\Filters\PublishRates::class,
     ];
 
     /**

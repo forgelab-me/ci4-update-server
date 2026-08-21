@@ -253,6 +253,11 @@ the question that matters more than either option: where the signing key lives.
 - Publish credentials are Shield access tokens: stored hashed, scoped to one
   project, and expiring per token. They can add a release but never promote
   one — see [Publishing from CI](docs/publishing.md).
+- Uploaded archives are size-checked end to end — the ZIP itself, and the
+  `manifest.json` read out of it before it ever reaches memory — so a crafted
+  upload cannot exhaust server memory.
+- `POST /api/{slug}/publish/token` and `POST /api/{slug}/releases` are
+  rate-limited per IP, on top of Shield's own throttling on `/auth/login`.
 - Serve this over HTTPS. Every app pointed at it treats its response as
   trusted — see the
   [Security section of ci4-updater](https://github.com/forgelab-me/ci4-updater#security)

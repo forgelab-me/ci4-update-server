@@ -339,16 +339,16 @@
         },
         {
             "name": "forgelab-me/ci4-updater",
-            "version": "2.10.0",
+            "version": "2.11.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/forgelab-me/ci4-updater.git",
-                "reference": "25427ef4d622fd7693a67530c1f064673d3dd2db"
+                "reference": "bc7b928174b684002b841728e6ae690aa88190a4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/forgelab-me/ci4-updater/zipball/25427ef4d622fd7693a67530c1f064673d3dd2db",
-                "reference": "25427ef4d622fd7693a67530c1f064673d3dd2db",
+                "url": "https://api.github.com/repos/forgelab-me/ci4-updater/zipball/bc7b928174b684002b841728e6ae690aa88190a4",
+                "reference": "bc7b928174b684002b841728e6ae690aa88190a4",
                 "shasum": ""
             },
             "require": {
@@ -393,7 +393,7 @@
                 "issues": "https://github.com/forgelab-me/ci4-updater/issues",
                 "source": "https://github.com/forgelab-me/ci4-updater"
             },
-            "time": "2026-08-16T20:54:40+00:00"
+            "time": "2026-08-20T19:13:08+00:00"
         },
         {
             "name": "laminas/laminas-escaper",
@@ -1087,16 +1087,16 @@
         },
         {
             "name": "friendsofphp/php-cs-fixer",
-            "version": "v3.95.19",
+            "version": "v3.95.20",
             "source": {
                 "type": "git",
                 "url": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer.git",
-                "reference": "8a06c4ad6bd580b7920bd5ff81b271ca1158507e"
+                "reference": "4d6c9886a77dbc1db3b9eaca6472cedf9eb1fab7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/8a06c4ad6bd580b7920bd5ff81b271ca1158507e",
-                "reference": "8a06c4ad6bd580b7920bd5ff81b271ca1158507e",
+                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/4d6c9886a77dbc1db3b9eaca6472cedf9eb1fab7",
+                "reference": "4d6c9886a77dbc1db3b9eaca6472cedf9eb1fab7",
                 "shasum": ""
             },
             "require": {
@@ -1132,7 +1132,6 @@
                 "infection/infection": "^0.32.7",
                 "justinrainbow/json-schema": "^6.10.0",
                 "keradus/cli-executor": "^2.3",
-                "mikey179/vfsstream": "^1.6.12",
                 "php-coveralls/php-coveralls": "^2.9.1",
                 "php-cs-fixer/phpunit-constraint-isidenticalstring": "^1.8",
                 "php-cs-fixer/phpunit-constraint-xmlmatchesxsd": "^1.8",
@@ -1180,7 +1179,7 @@
             ],
             "support": {
                 "issues": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/issues",
-                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.95.19"
+                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.95.20"
             },
             "funding": [
                 {
@@ -1188,7 +1187,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-08-17T16:24:07+00:00"
+            "time": "2026-08-19T16:28:14+00:00"
         },
         {
             "name": "kint-php/kint",

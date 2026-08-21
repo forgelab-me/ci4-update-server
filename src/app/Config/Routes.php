@@ -47,8 +47,8 @@ $routes->group('projects', ['filter' => 'admin'], static function (RouteCollecti
 // -------------------------------------------------------------------------
 // Publishing from CI. The exchange endpoint authenticates a GitHub identity
 // token itself; the upload sits behind Shield's access-token filter.
-$routes->post('api/(:segment)/publish/token',                  'PublishController::mintToken/$1');
-$routes->post('api/(:segment)/releases',                       'PublishController::upload/$1', ['filter' => 'tokens']);
+$routes->post('api/(:segment)/publish/token',                  'PublishController::mintToken/$1', ['filter' => 'publish-rates']);
+$routes->post('api/(:segment)/releases',                       'PublishController::upload/$1', ['filter' => ['publish-rates', 'tokens']]);
 
 $routes->get('api/(:segment)/latest.json',                     'ApiController::latest/$1');
 $routes->get('api/(:segment)/files/(:segment)/(:segment)',     'ApiController::file/$1/$2/$3');

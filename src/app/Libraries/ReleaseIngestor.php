@@ -26,6 +26,15 @@ final class ReleaseIngestor
      */
     public const MAX_BYTES = 256 * 1024 * 1024;
 
+    /**
+     * Cap on manifest.json's *uncompressed* size. A manifest is a small JSON
+     * document; anything past this is either a mistake or a decompression
+     * bomb — a small, highly-compressible entry that expands to gigabytes
+     * once read into memory. Checked via statName() before the content is
+     * ever pulled out, so the bomb never actually goes off.
+     */
+    private const MAX_MANIFEST_BYTES = 1 * 1024 * 1024;
+
     private ReleaseModel $releases;
 
     public function __construct(?ReleaseModel $releases = null)
@@ -134,13 +143,15 @@ final class ReleaseIngestor
             return null;
         }
 
-        $content = $zip->getFromName('manifest.json');
+        $name = self::locateManifest($zip);
 
-        if ($content === false) {
-            $prefix  = self::detectZipPrefix($zip);
-            $content = $prefix !== '' ? $zip->getFromName($prefix . 'manifest.json') : false;
+        if ($name === null || ! self::manifestSizeIsSafe($zip, $name)) {
+            $zip->close();
+
+            return null;
         }
 
+        $content = $zip->getFromName($name);
         $zip->close();
 
         if ($content === false) {
@@ -152,6 +163,38 @@ final class ReleaseIngestor
         return (is_array($data) && json_last_error() === JSON_ERROR_NONE)
             ? ['data' => $data, 'raw' => $content]
             : null;
+    }
+
+    /**
+     * The entry name manifest.json is stored under — either at the root, or
+     * behind the single top-level folder detectZipPrefix() finds — or null
+     * when neither exists.
+     */
+    private static function locateManifest(\ZipArchive $zip): ?string
+    {
+        if ($zip->statName('manifest.json') !== false) {
+            return 'manifest.json';
+        }
+
+        $prefix = self::detectZipPrefix($zip);
+
+        return $prefix !== '' && $zip->statName($prefix . 'manifest.json') !== false
+            ? $prefix . 'manifest.json'
+            : null;
+    }
+
+    /**
+     * Whether $name's *uncompressed* size is small enough to read into memory.
+     *
+     * Checked via statName() rather than after extraction: a tiny compressed
+     * entry can expand to gigabytes, so the size has to be known before the
+     * bytes are ever pulled out, not after.
+     */
+    private static function manifestSizeIsSafe(\ZipArchive $zip, string $name): bool
+    {
+        $stat = $zip->statName($name);
+
+        return $stat !== false && (int) $stat['size'] <= self::MAX_MANIFEST_BYTES;
     }
 
     /**
