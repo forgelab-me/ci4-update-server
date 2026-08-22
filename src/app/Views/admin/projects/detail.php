@@ -1,5 +1,6 @@
 <?= $this->extend('layouts/main') ?>
 <?= $this->section('content') ?>
+<?php helper('number') ?>
 
 <div class="d-flex align-items-center mb-4">
     <a href="<?= site_url('dashboard') ?>" class="btn btn-outline-secondary btn-sm me-3">
@@ -162,6 +163,7 @@
                         <tr>
                             <th>Version</th>
                             <th>Covers</th>
+                            <th class="text-end">Size</th>
                             <th class="text-end">Downloads</th>
                             <th>Date</th>
                             <th>Changelog</th>
@@ -182,6 +184,9 @@
                                 <?php else: ?>
                                     <span class="text-muted" title="Built before ci4-updater 2.6, which is when a release started declaring its scope.">—</span>
                                 <?php endif; ?>
+                            </td>
+                            <td class="text-end font-monospace small text-muted">
+                                <?= $r['size'] !== null ? number_to_size($r['size'], 1) : '—' ?>
                             </td>
                             <td class="text-end font-monospace small">
                                 <?php $dl = (int) ($r['downloads'] ?? 0); ?>

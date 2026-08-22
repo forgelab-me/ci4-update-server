@@ -73,6 +73,12 @@
                         <?php else: ?>
                             <span class="text-muted">—</span>
                         <?php endif; ?>
+                        <?php if (isset($pending[$p['id']])): ?>
+                            <span class="badge bg-warning text-dark"
+                                  title="v<?= esc($pending[$p['id']]) ?> was uploaded after the current latest release but hasn't been promoted yet.">
+                                <i class="bi bi-exclamation-triangle me-1"></i>v<?= esc($pending[$p['id']]) ?> pending
+                            </span>
+                        <?php endif; ?>
                     </td>
                     <td class="text-center">
                         <?php if ($p['token']): ?>

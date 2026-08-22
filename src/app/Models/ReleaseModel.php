@@ -80,4 +80,67 @@ class ReleaseModel extends Model
 
         return $totals;
     }
+
+    /**
+     * For each project with a promoted release, the highest version that
+     * outranks it but was never promoted — someone uploaded ahead of what's
+     * actually being served, and the dashboard is the only place that says
+     * so before it becomes a support question.
+     *
+     * Version order, not upload order: SQL's MAX() sorts versions as text,
+     * so this is done in PHP with version_compare() the same way every other
+     * "which release is newer" decision in this app already is.
+     *
+     * Silent when nothing has been promoted yet — that's the "—" already
+     * shown in the Latest Version column, not this indicator's concern.
+     *
+     * @return array<int, string> project_id => version
+     */
+    public function pendingPromotions(): array
+    {
+        $rows = $this->db->table('releases')
+            ->select('project_id, version, is_latest')
+            ->get()
+            ->getResultArray();
+
+        $byProject = [];
+        foreach ($rows as $row) {
+            $byProject[(int) $row['project_id']][] = $row;
+        }
+
+        $pending = [];
+
+        foreach ($byProject as $projectId => $releases) {
+            $latest = null;
+            foreach ($releases as $release) {
+                if ((int) $release['is_latest'] === 1) {
+                    $latest = (string) $release['version'];
+                    break;
+                }
+            }
+
+            if ($latest === null) {
+                continue;
+            }
+
+            $ahead = null;
+            foreach ($releases as $release) {
+                $version = (string) $release['version'];
+
+                if ((int) $release['is_latest'] === 1 || version_compare($version, $latest, '<=')) {
+                    continue;
+                }
+
+                if ($ahead === null || version_compare($version, $ahead, '>')) {
+                    $ahead = $version;
+                }
+            }
+
+            if ($ahead !== null) {
+                $pending[$projectId] = $ahead;
+            }
+        }
+
+        return $pending;
+    }
 }

@@ -9,6 +9,28 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.7.0] - 2026-08-21
+
+### Added
+
+- **The releases table shows each archive's size.** Read straight off disk
+  rather than stored, so what's displayed can never drift from the bytes
+  actually served.
+
+- **The dashboard flags a release that outranks "latest" but was never
+  promoted.** Uploading ahead of what's currently being served is easy to do
+  by accident — the project page already shows it release by release; the
+  dashboard now surfaces it across every project, before it becomes a support
+  question about why an app isn't seeing an upload that's clearly there.
+
+  Compared by version (`version_compare()`), not by upload order or date: an
+  upload made later doesn't mean its version is higher.
+
+### Upgrading
+
+Nothing to do beyond deploying — no migration, no configuration. Covers
+`app/` only.
+
 ## [1.6.4] - 2026-08-21
 
 ### Fixed

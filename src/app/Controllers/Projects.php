@@ -78,7 +78,7 @@ class Projects extends BaseController
         return view('admin/projects/detail', [
             'title'    => $project['name'],
             'project'  => $project,
-            'releases' => $this->releases->getForProject($id),
+            'releases' => $this->withSizes($this->releases->getForProject($id)),
             // Recomputed each time: which release is newest decides which of
             // the others have become skippable.
             'unguarded' => array_column($this->unguardedSteps($id), 'roots', 'version'),
@@ -502,6 +502,26 @@ class Projects extends BaseController
         return $joined === '' ? null : mb_substr($joined, 0, 255);
     }
 
+
+    /**
+     * Attaches each release's archive size in bytes, read straight off the
+     * filesystem rather than stored: it's cheap to ask, and the bytes
+     * actually served are the only source that can't drift from what's shown.
+     *
+     * @param list<array<string, mixed>> $releases
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function withSizes(array $releases): array
+    {
+        foreach ($releases as &$release) {
+            $release['size'] = (! empty($release['zip_path']) && file_exists($release['zip_path']))
+                ? filesize($release['zip_path'])
+                : null;
+        }
+
+        return $releases;
+    }
 
     private function deleteReleaseFiles(array $release): void
     {

@@ -123,14 +123,17 @@ From the dashboard (`/admin`):
    date, and optionally mark it as the latest release right away.
 
    The version and the directories the release covers are read from the
-   manifest; the latter show in a **Covers** column. A release that ships
-   `vendor/` is much larger, and is refused by any app that hasn't listed
-   `vendor` in its `Config\Updater::$allowedRoots`.
+   manifest; the latter show in a **Covers** column, alongside the archive's
+   **Size**. A release that ships `vendor/` is much larger, and is refused by
+   any app that hasn't listed `vendor` in its `Config\Updater::$allowedRoots`.
 
    A version already uploaded is refused rather than overwritten: an app that
    downloaded it must never get different files under the same name.
 3. **Set latest** — any uploaded release can be (re)promoted to "latest"
-   from the project page, independently of upload order.
+   from the project page, independently of upload order. Uploading ahead of
+   what's currently latest without promoting it is easy to do by accident, so
+   the dashboard flags it — a **vX.X.X pending** badge next to any project
+   with a release that outranks its current latest.
 4. **Required step** — mark a release apps must not jump over, and it is
    served on its own until they have applied it. Worth it when a release
    ships a directory later ones don't, or a migration a later one depends on.

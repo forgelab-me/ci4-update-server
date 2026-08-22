@@ -118,4 +118,68 @@ final class ReleaseModelTest extends CIUnitTestCase
 
         $this->assertSame(['3.0.0', '2.0.0', '1.0.0'], $versions);
     }
+
+    /**
+     * The dashboard's whole point: an upload that outranks what's actually
+     * being served, sitting there un-promoted.
+     */
+    public function testPendingPromotionsFlagsAReleaseAheadOfLatest(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.0.0', true);
+        $this->makeRelease($project, '2.0.0');
+
+        $pending = $this->releases->pendingPromotions();
+
+        $this->assertSame(['2.0.0'], array_values($pending));
+        $this->assertSame($project, array_key_first($pending));
+    }
+
+    /**
+     * version_compare(), not upload order or created_at: an upload made
+     * later doesn't mean its version is higher.
+     */
+    public function testPendingPromotionsComparesByVersionNotUploadOrder(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '2.0.0', true, '2026-01-01');
+        $this->makeRelease($project, '1.5.0', false, '2026-08-01');
+
+        $this->assertArrayNotHasKey($project, $this->releases->pendingPromotions());
+    }
+
+    /**
+     * Several releases ahead of latest: only the highest is worth surfacing.
+     */
+    public function testPendingPromotionsReportsTheHighestVersionOnly(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.0.0', true);
+        $this->makeRelease($project, '1.1.0');
+        $this->makeRelease($project, '1.2.0');
+
+        $this->assertSame('1.2.0', $this->releases->pendingPromotions()[$project]);
+    }
+
+    public function testPendingPromotionsIsSilentWhenLatestIsAlreadyTheHighest(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.0.0');
+        $this->makeRelease($project, '2.0.0', true);
+
+        $this->assertArrayNotHasKey($project, $this->releases->pendingPromotions());
+    }
+
+    /**
+     * Nothing promoted yet isn't this indicator's concern — that state is
+     * already visible as "—" in the dashboard's Latest Version column.
+     */
+    public function testPendingPromotionsIsSilentWhenNothingIsPromoted(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.0.0');
+        $this->makeRelease($project, '2.0.0');
+
+        $this->assertArrayNotHasKey($project, $this->releases->pendingPromotions());
+    }
 }
