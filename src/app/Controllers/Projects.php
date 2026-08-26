@@ -10,6 +10,7 @@ use App\Models\ReleaseModel;
 use App\Models\TrustedPublisherModel;
 use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\I18n\Time;
+use Config\TrustedPublishing;
 use Forgelabme\TrustedPublishing\ScopedTokens;
 
 class Projects extends BaseController
@@ -86,6 +87,7 @@ class Projects extends BaseController
             'publishTokens'  => ScopedTokens::withScope('publish:' . $project['slug']),
             'publishers'     => (new TrustedPublisherModel())->forProject($id),
             'oidcAudience'   => rtrim(base_url(), '/'),
+            'ciProviders'    => config(TrustedPublishing::class)->providerNames(),
         ]);
     }
 
@@ -232,7 +234,8 @@ class Projects extends BaseController
     }
 
     /**
-     * Trusts a GitHub workflow to publish here without a stored secret.
+     * Trusts a CI workflow (GitHub Actions, GitLab CI, …) to publish here
+     * without a stored secret.
      */
     public function addPublisher(int $projectId): RedirectResponse
     {
@@ -241,20 +244,31 @@ class Projects extends BaseController
             return redirect()->to(site_url('admin'));
         }
 
+        $providers  = config(TrustedPublishing::class)->providerNames();
+        $provider   = trim((string) $this->request->getPost('provider'));
         $repository = trim((string) $this->request->getPost('repository'));
         $ownerId    = trim((string) $this->request->getPost('repository_owner_id'));
         $env        = trim((string) $this->request->getPost('environment'));
+        $workflow   = trim((string) $this->request->getPost('workflow'));
 
-        if (preg_match('#\A[\w.-]+/[\w.-]+\z#', $repository) !== 1) {
-            session()->setFlashdata('error', 'Repository must look like owner/name.');
+        if (! in_array($provider, $providers, true)) {
+            session()->setFlashdata('error', 'Unknown CI provider.');
 
             return redirect()->to(site_url("projects/{$projectId}"));
         }
 
-        // The numeric account id is what the match is really pinned on, so a
-        // typo here silently means "nothing will ever authenticate".
+        // owner/repo on GitHub; namespace/subgroup/project on GitLab, which
+        // allows nesting — so at least one slash, not exactly one.
+        if (preg_match('#\A[\w.-]+(?:/[\w.-]+)+\z#', $repository) !== 1) {
+            session()->setFlashdata('error', 'Repository must look like owner/name (or group/subgroup/project on GitLab).');
+
+            return redirect()->to(site_url("projects/{$projectId}"));
+        }
+
+        // The numeric account/namespace id is what the match is really pinned
+        // on, so a typo here silently means "nothing will ever authenticate".
         if (preg_match('/\A\d+\z/', $ownerId) !== 1) {
-            session()->setFlashdata('error', 'Owner id must be the numeric GitHub account id — see https://api.github.com/users/<owner>.');
+            session()->setFlashdata('error', 'Owner id must be numeric — the GitHub account id or GitLab namespace id.');
 
             return redirect()->to(site_url("projects/{$projectId}"));
         }
@@ -262,10 +276,11 @@ class Projects extends BaseController
         (new TrustedPublisherModel())->insert([
             'project_id'          => $projectId,
             'user_id'             => auth()->id(),
-            'provider'            => 'github',
+            'provider'            => $provider,
             'repository'          => $repository,
             'repository_owner_id' => $ownerId,
             'environment'         => $env !== '' ? $env : null,
+            'workflow'            => $workflow !== '' ? $workflow : null,
             'created_at'          => date('Y-m-d H:i:s'),
         ]);
 

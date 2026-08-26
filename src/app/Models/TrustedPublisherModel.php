@@ -11,7 +11,7 @@ class TrustedPublisherModel extends Model
     protected $table         = 'trusted_publishers';
     protected $primaryKey    = 'id';
     protected $returnType    = 'array';
-    protected $allowedFields = ['project_id', 'user_id', 'provider', 'repository', 'repository_owner_id', 'environment', 'last_used_at', 'created_at'];
+    protected $allowedFields = ['project_id', 'user_id', 'provider', 'repository', 'repository_owner_id', 'environment', 'workflow', 'last_used_at', 'created_at'];
     protected $useTimestamps = false;
 
     /**

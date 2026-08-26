@@ -12,6 +12,7 @@ use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Shield\Models\UserModel;
 use Config\TrustedPublishing;
 use Forgelabme\TrustedPublishing\ScopedTokens;
+use Forgelabme\TrustedPublishing\VerificationResult;
 use Forgelabme\TrustedPublishing\Verifier;
 
 /**
@@ -21,8 +22,10 @@ use Forgelabme\TrustedPublishing\Verifier;
  *
  *  - a Shield access token scoped `publish:{slug}`, stored by whoever runs the
  *    pipeline;
- *  - or an exchange: a workflow presents the identity token GitHub minted for
- *    it, and gets back one of those access tokens, valid for minutes.
+ *  - or an exchange: a workflow presents the identity token its CI system
+ *    (GitHub Actions, GitLab CI — see `Config\TrustedPublishing::$providers`)
+ *    minted for it, and gets back one of those access tokens, valid for
+ *    minutes.
  *
  * The upload endpoint only ever sees an access token, so it does not care
  * which route produced it — Trusted Publishing is a way of *obtaining* the
@@ -54,7 +57,8 @@ class PublishController extends BaseController
     /**
      * POST /api/{slug}/publish/token
      *
-     * Exchanges a GitHub Actions identity token for a short-lived upload token.
+     * Exchanges a CI identity token — GitHub Actions or GitLab CI, whichever
+     * signed it — for a short-lived upload token.
      */
     public function mintToken(string $slug): ResponseInterface
     {
@@ -65,10 +69,10 @@ class PublishController extends BaseController
 
         $presented = $this->bearer();
         if ($presented === '') {
-            return $this->fail(401, 'Send the GitHub OIDC token as: Authorization: Bearer <token>');
+            return $this->fail(401, 'Send the CI identity token as: Authorization: Bearer <token>');
         }
 
-        $result = config(TrustedPublishing::class)->verifier('github')->verify($presented);
+        $result = $this->verifyIdentity($presented);
         if (! $result->ok) {
             return $this->fail(401, $result->error);
         }
@@ -82,11 +86,12 @@ class PublishController extends BaseController
             // its own repository, and guessing why a match failed is the most
             // common way to waste an afternoon on this.
             return $this->fail(403, sprintf(
-                'No trusted publisher on "%s" matches %s (owner id %s%s). Add it on the project page.',
+                'No trusted publisher on "%s" matches %s (owner id %s%s%s). Add it on the project page.',
                 $slug,
                 $identity->repository,
                 $identity->ownerId,
-                $identity->environment !== '' ? ', environment ' . $identity->environment : ''
+                $identity->environment !== '' ? ', environment ' . $identity->environment : '',
+                $identity->workflow !== '' ? ', workflow ' . $identity->workflow : ''
             ));
         }
 
@@ -182,6 +187,54 @@ class PublishController extends BaseController
     private function bearer(): string
     {
         return Verifier::bearer($this->request->getHeaderLine('Authorization'));
+    }
+
+    /**
+     * Picks the right provider for $token, then runs its Verifier.
+     *
+     * The caller doesn't say which CI system minted the token, so the `iss`
+     * claim is read *without* verifying the signature, purely to select which
+     * provider's Verifier to run — not to decide anything. That Verifier
+     * re-checks the real issuer as part of full verification, so a spoofed
+     * `iss` only ever picks the wrong (or no) provider and then fails
+     * signature verification there; it can't forge an identity.
+     *
+     * Doing it this way, rather than trying every configured provider in
+     * turn, matters in practice: each provider's JWKS is a live network fetch
+     * the first time, so trying all of them on every mismatched token would
+     * mean a GitHub-signed request also costs a fetch of GitLab's keys (and
+     * vice versa) for no reason.
+     */
+    private function verifyIdentity(string $token): VerificationResult
+    {
+        $config = config(TrustedPublishing::class);
+        $issuer = self::unverifiedIssuer($token);
+
+        foreach ($config->providerNames() as $name) {
+            if ($config->provider($name)?->issuer() === $issuer) {
+                return $config->verifier($name)->verify($token);
+            }
+        }
+
+        return VerificationResult::refused('Token was not issued by a CI system this server trusts.');
+    }
+
+    /**
+     * The `iss` claim of a JWT's payload, read without checking its
+     * signature — see verifyIdentity() for why that's safe here. '' for
+     * anything that isn't a well-formed JWT.
+     */
+    private static function unverifiedIssuer(string $jwt): string
+    {
+        $segments = explode('.', $jwt);
+        if (count($segments) !== 3) {
+            return '';
+        }
+
+        $padded  = strtr($segments[1], '-_', '+/');
+        $payload = json_decode((string) base64_decode($padded . str_repeat('=', (4 - strlen($padded) % 4) % 4), true), true);
+
+        return is_array($payload) ? (string) ($payload['iss'] ?? '') : '';
     }
 
     private function fail(int $status, string $message): ResponseInterface

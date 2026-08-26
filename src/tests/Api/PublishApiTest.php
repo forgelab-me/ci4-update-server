@@ -12,6 +12,7 @@ use CodeIgniter\Test\FeatureTestTrait;
 use Forgelabme\TrustedPublishing\Identity;
 use Forgelabme\TrustedPublishing\Jwks\CachedJwks;
 use Forgelabme\TrustedPublishing\Providers\GithubActions;
+use Forgelabme\TrustedPublishing\Providers\GitlabCi;
 use Forgelabme\TrustedPublishing\ScopedTokens;
 
 /**
@@ -66,9 +67,16 @@ final class PublishApiTest extends CIUnitTestCase
             'repository'          => 'forgelab-me/my-app',
             'repository_owner_id' => '10387667',
             'environment'         => '',
+            'workflow'            => '',
         ], $over);
 
-        return new Identity('github', $claims['repository'], $claims['repository_owner_id'], $claims['environment']);
+        return new Identity(
+            provider: 'github',
+            repository: $claims['repository'],
+            ownerId: $claims['repository_owner_id'],
+            environment: $claims['environment'],
+            workflow: $claims['workflow'],
+        );
     }
 
     public function testAMatchingWorkflowIsRecognised(): void
@@ -118,6 +126,24 @@ final class PublishApiTest extends CIUnitTestCase
         self::assertNull($publishers->match($id, $this->identity()), 'no environment presented');
         self::assertNull($publishers->match($id, $this->identity(['environment' => 'staging'])));
         self::assertNotNull($publishers->match($id, $this->identity(['environment' => 'release'])));
+    }
+
+    /**
+     * Pinned one level lower than environment: not just which repository and
+     * environment, but which pipeline file is trusted to run in them.
+     */
+    public function testAConfiguredWorkflowIsRequired(): void
+    {
+        $id = $this->makeProject();
+        $this->publisher($id, ['workflow' => 'forgelab-me/my-app/.github/workflows/release.yml']);
+
+        $publishers = new TrustedPublisherModel();
+
+        self::assertNull($publishers->match($id, $this->identity()), 'no workflow presented');
+        self::assertNull($publishers->match($id, $this->identity(['workflow' => 'some/other/workflow.yml'])));
+        self::assertNotNull($publishers->match($id, $this->identity([
+            'workflow' => 'forgelab-me/my-app/.github/workflows/release.yml',
+        ])));
     }
 
     public function testAPublisherOfAnotherProjectDoesNotMatch(): void
@@ -436,6 +462,50 @@ final class PublishApiTest extends CIUnitTestCase
     }
 
     /**
+     * The other configured provider, exercised end to end: a token signed by
+     * a key the server fetches from GitLab's JWKS, matching a publisher
+     * trusted with provider=gitlab, and a scoped credential coming back.
+     */
+    public function testAGitlabWorkflowGetsAScopedToken(): void
+    {
+        $id   = $this->makeProject();
+        $user = $this->ciUser();
+        $this->publisher($id, [
+            'user_id'  => $user->id,
+            'provider' => 'gitlab',
+        ]);
+
+        $r = $this->withHeaders(['Authorization' => 'Bearer ' . $this->gitlabToken()])
+            ->call('post', 'api/my-app/publish/token');
+
+        $r->assertStatus(200);
+
+        $body = json_decode($r->getJSON(), true);
+        self::assertSame('publish:my-app', $body['scope']);
+    }
+
+    /**
+     * Which provider verifies a token is picked from its own (unverified)
+     * `iss` claim, precisely so a token from neither configured CI system is
+     * refused immediately — without a live fetch of every provider's JWKS on
+     * the way to finding out none of them signed it.
+     */
+    public function testATokenFromAnUnknownIssuerIsRefusedWithoutTryingEveryProvider(): void
+    {
+        $this->makeProject();
+
+        $b64u    = static fn (string $bin): string => rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+        $header  = $b64u((string) json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $payload = $b64u((string) json_encode(['iss' => 'https://issuer.example.com']));
+
+        $r = $this->withHeaders(['Authorization' => 'Bearer ' . "{$header}.{$payload}.sig"])
+            ->call('post', 'api/my-app/publish/token');
+
+        $r->assertStatus(401);
+        self::assertStringContainsString('not issued by a CI system this server trusts', $r->getJSON());
+    }
+
+    /**
      * A signature from any other key is worthless, however well-formed the
      * claims are.
      */
@@ -509,6 +579,47 @@ final class PublishApiTest extends CIUnitTestCase
         ]]], 60);
 
         return \Firebase\JWT\JWT::encode($this->githubClaims($over), $pem, 'RS256', 'github-test-key');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function gitlabClaims(array $over = []): array
+    {
+        return array_merge([
+            'iss'               => 'https://gitlab.com',
+            'aud'               => rtrim(base_url(), '/'),
+            'project_path'      => 'forgelab-me/my-app',
+            'namespace_id'      => '10387667',
+            'environment'       => '',
+            'ci_config_ref_uri' => 'gitlab.com/forgelab-me/my-app//.gitlab-ci.yml@refs/heads/main',
+            'iat'               => time() - 10,
+            'exp'               => time() + 300,
+        ], $over);
+    }
+
+    /**
+     * A token GitLab would have signed — except the key is ours, and the JWKS
+     * the server would fetch is seeded into its cache.
+     */
+    private function gitlabToken(array $over = []): string
+    {
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($key, $pem);
+        $details = openssl_pkey_get_details($key);
+
+        $b64u = static fn (string $bin): string => rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+
+        service('cache')->save(CachedJwks::cacheKey(new GitlabCi()), ['keys' => [[
+            'kty' => 'RSA',
+            'kid' => 'gitlab-test-key',
+            'use' => 'sig',
+            'alg' => 'RS256',
+            'n'   => $b64u($details['rsa']['n']),
+            'e'   => $b64u($details['rsa']['e']),
+        ]]], 60);
+
+        return \Firebase\JWT\JWT::encode($this->gitlabClaims($over), $pem, 'RS256', 'gitlab-test-key');
     }
 
     private function zipWith(string $version): string

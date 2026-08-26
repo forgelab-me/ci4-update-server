@@ -43,21 +43,29 @@ Give it an expiry — a token nobody remembers is a token nobody revokes.
 
 ## Option B — Trusted Publishing
 
-No stored secret at all. GitHub mints a short-lived identity token for the
-workflow; the server checks it and hands back a 15-minute publish token.
+No stored secret at all. Your CI system — GitHub Actions or GitLab CI — mints
+a short-lived identity token for the workflow; the server checks it and hands
+back a 15-minute publish token.
 
 On the project page, add a trusted publisher:
 
 | Field | Value |
 |---|---|
-| Repository | `forgelab-me/my-app` |
-| Owner id | the **numeric** account id — `https://api.github.com/users/forgelab-me` |
+| Provider | `github` or `gitlab` |
+| Repository | `forgelab-me/my-app` (GitHub), or `group/subgroup/project` (GitLab — nesting allowed) |
+| Owner id | the **numeric** id — the GitHub account id (`https://api.github.com/users/forgelab-me`), or the GitLab namespace id |
 | Environment | optional, but see above |
+| Workflow | optional — the pipeline file itself, so only *that* workflow in the repository may mint against this row |
 
 The owner id is what the match is really pinned on. A repository name can be
 renamed, or freed and claimed by someone else; a numeric account id is never
 reassigned. Pinning on the name alone would mean losing the name loses the
-project.
+project. Workflow goes one level further: pin it and a token minted by any
+*other* workflow file in the same repository — someone else's job, added
+later, with different reviewers — is refused, not just tokens from outside
+the repository entirely.
+
+### GitHub Actions
 
 ```yaml
 permissions:
@@ -99,20 +107,59 @@ jobs:
             https://updates.example.com/api/my-app/releases
 ```
 
+### GitLab CI
+
+GitLab has no equivalent of GitHub's token-request dance: declare the
+audience the token must carry, and it turns up as an environment variable
+under the name given.
+
+```yaml
+publish:
+  stage: deploy
+  environment: release # matches the trusted publisher, and gates the secrets
+  id_tokens:
+    UPDATE_SERVER_ID_TOKEN:
+      aud: https://updates.example.com
+  script:
+    - composer install --no-dev --optimize-autoloader
+    - php spark update:manifest --sign "$SIGNING_KEY_PATH"
+    - >
+      TOKEN=$(curl -sS --fail-with-body -X POST
+      -H "Authorization: Bearer $UPDATE_SERVER_ID_TOKEN"
+      https://updates.example.com/api/my-app/publish/token | jq -r .token)
+    - >
+      curl --fail-with-body
+      -H "Authorization: Bearer $TOKEN"
+      -F "zip_file=@release_*.zip"
+      https://updates.example.com/api/my-app/releases
+  rules:
+    - if: $CI_COMMIT_TAG
+```
+
+Self-hosted instances need their URL set in
+[`app/Config/TrustedPublishing.php`](../src/app/Config/TrustedPublishing.php)
+(`new GitlabCi('https://gitlab.example.com')`); the default trusts gitlab.com.
+
 ## In this repository
 
 [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) does the
-above for this server's own releases, on a `v*` tag. Two things it works out on
-its own:
+above for this server's own releases, on a `v*` tag. Three things it works out
+on its own:
 
 - **What the release covers.** `app,public` normally; `app,public,vendor` when
   `composer.lock` moved since the previous tag, since that is the only time the
   dependencies need shipping.
+- **Whether `composer.json`/`composer.lock` travel with it.** Only when
+  `vendor/` does — passed via `update:manifest --files`, and accepted on the
+  applying side because `Config\Updater::$allowedFiles` names them. Without
+  this, a release shipping `vendor/` would leave the two describing a
+  different dependency set than what's actually on disk.
 - **Whether it is a required step.** Yes whenever `vendor/` ships — skip such a
   release and the dependency update it carries is never applied, because the
   next one only touches `app/` and `public/`.
 
-Both can be overridden by running the workflow by hand. It also refuses to
+Roots and required can be overridden by running the workflow by hand; which
+root files travel follows roots automatically. It also refuses to
 publish when the tag disagrees with `Config\Updater::VERSION`, which is what the
 manifest is built from.
 
@@ -131,7 +178,7 @@ once. What stays here is what a publish credential is allowed to do.
 ## The endpoints
 
 ```
-POST /api/{slug}/publish/token     Authorization: Bearer <GitHub OIDC token>
+POST /api/{slug}/publish/token     Authorization: Bearer <CI identity token>
   → { "token": "...", "expires_in": 900, "scope": "publish:{slug}" }
 
 POST /api/{slug}/releases          Authorization: Bearer <publish token>

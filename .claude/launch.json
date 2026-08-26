@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ci4-updater-server",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["src/spark", "serve", "--host", "localhost", "--port", "8996"],
+      "port": 8996
+    }
+  ]
+}

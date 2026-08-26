@@ -36,6 +36,7 @@ class Filters extends BaseFilters
         'performance'   => PerformanceMetrics::class,
         'admin'         => \App\Filters\AdminFilter::class,
         'publish-rates' => \App\Filters\PublishRates::class,
+        'maintenance'   => \Forgelabme\Ci4Updater\Filters\Maintenance::class,
     ];
 
     /**
@@ -77,6 +78,12 @@ class Filters extends BaseFilters
             // 'honeypot',
             'csrf' => ['except' => ['api/*']],
             // 'invalidchars',
+
+            // Answers 503 while an update is writing app/ or public/, so
+            // nothing — the panel included — is served through a half-written
+            // codebase. Closed unless an update is actually applying; the
+            // panel itself stays reachable so an admin can watch it finish.
+            'maintenance' => ['except' => ['admin/updates', 'admin/updates/*']],
         ],
         'after' => [
             // 'honeypot',

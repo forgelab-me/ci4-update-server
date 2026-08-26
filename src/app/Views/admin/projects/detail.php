@@ -343,23 +343,32 @@
 
                 <h6>Trusted publishers <span class="badge bg-secondary ms-1">no stored secret</span></h6>
                 <p class="text-muted small">
-                    A GitHub workflow proves who it is with the identity token GitHub mints for it, and gets a
-                    15-minute token in exchange. It must request the audience
+                    A workflow proves who it is with the identity token its CI system mints for it —
+                    <?= esc(implode(' or ', array_map(static fn ($p) => $p === 'github' ? 'GitHub Actions' : ($p === 'gitlab' ? 'GitLab CI' : $p), $ciProviders))) ?> —
+                    and gets a 15-minute token in exchange. It must request the audience
                     <code><?= esc($oidcAudience) ?></code>.
                 </p>
 
                 <?php if (! empty($publishers)): ?>
                     <div class="table-responsive mb-3">
                         <table class="table table-sm mb-0">
-                            <thead><tr><th>Repository</th><th>Owner id</th><th>Environment</th><th>Last used</th><th></th></tr></thead>
+                            <thead><tr><th>Provider</th><th>Repository</th><th>Owner id</th><th>Environment</th><th>Workflow</th><th>Last used</th><th></th></tr></thead>
                             <tbody>
                             <?php foreach ($publishers as $pb): ?>
                                 <tr>
+                                    <td class="small text-muted"><?= esc($pb['provider'] ?: 'github') ?></td>
                                     <td class="font-monospace small"><?= esc($pb['repository']) ?></td>
                                     <td class="font-monospace small text-muted"><?= esc($pb['repository_owner_id']) ?></td>
                                     <td class="small">
                                         <?php if ($pb['environment']): ?>
                                             <?= esc($pb['environment']) ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">any</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="small">
+                                        <?php if (! empty($pb['workflow'])): ?>
+                                            <span class="font-monospace" title="<?= esc($pb['workflow']) ?>"><?= esc($pb['workflow']) ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">any</span>
                                         <?php endif; ?>
@@ -382,22 +391,35 @@
                 <?php /* align-items-start, not -end: the hints below some inputs would otherwise push their column up. */ ?>
                 <form method="POST" action="<?= site_url('projects/' . $project['id'] . '/publishers') ?>" class="row g-2 align-items-start">
                     <?= csrf_field() ?>
+                    <div class="col-sm-2">
+                        <label class="form-label small">Provider</label>
+                        <select name="provider" class="form-select form-select-sm">
+                            <?php foreach ($ciProviders as $p): ?>
+                                <option value="<?= esc($p) ?>"><?= esc($p) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <div class="col-sm-4">
                         <label class="form-label small">Repository</label>
                         <input name="repository" class="form-control form-control-sm" placeholder="forgelab-me/my-app" required>
-                        <div class="form-text" style="font-size:.75rem">owner/repo</div>
+                        <div class="form-text" style="font-size:.75rem">owner/repo, or group/subgroup/project on GitLab</div>
                     </div>
                     <div class="col-sm-3">
                         <label class="form-label small">Owner id</label>
                         <input name="repository_owner_id" class="form-control form-control-sm" placeholder="10387667" required>
-                        <div class="form-text" style="font-size:.75rem">api.github.com/users/&lt;owner&gt;</div>
+                        <div class="form-text" style="font-size:.75rem">GitHub account id, or GitLab namespace id</div>
                     </div>
                     <div class="col-sm-3">
                         <label class="form-label small">Environment</label>
                         <input name="environment" class="form-control form-control-sm" placeholder="release">
                         <div class="form-text" style="font-size:.75rem">blank = any</div>
                     </div>
-                    <div class="col-sm-2">
+                    <div class="col-sm-4">
+                        <label class="form-label small">Workflow</label>
+                        <input name="workflow" class="form-control form-control-sm" placeholder=".github/workflows/release.yml">
+                        <div class="form-text" style="font-size:.75rem">blank = any workflow in the repository</div>
+                    </div>
+                    <div class="col-sm-3">
                         <label class="form-label small d-none d-sm-inline-block">&nbsp;</label>
                         <button class="btn btn-sm btn-success w-100">Trust</button>
                     </div>

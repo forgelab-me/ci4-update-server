@@ -121,10 +121,18 @@ jobs:
             *)   case "$ROOTS" in *vendor*) REQUIRED=1 ;; *) REQUIRED=0 ;; esac ;;
           esac
 
+          # composer.json/composer.lock only need to travel when vendor/ does:
+          # that's the only time they could otherwise describe a different
+          # dependency set than what's on disk. Config\Updater::$allowedFiles
+          # is what lets an installing app accept them.
+          case "$ROOTS" in *vendor*) FILES=composer.json,composer.lock ;; *) FILES= ;; esac
+
           echo "Covers   : $ROOTS"
           echo "Required : $REQUIRED"
+          echo "Files    : ${FILES:-none}"
           echo "roots=$ROOTS" >> "$GITHUB_OUTPUT"
           echo "required=$REQUIRED" >> "$GITHUB_OUTPUT"
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         working-directory: src
@@ -136,6 +144,7 @@ jobs:
           SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
           SIGNING_KEY_PASSPHRASE: ${{ secrets.RELEASE_SIGNING_KEY_PASSPHRASE }}
           ROOTS: ${{ steps.scope.outputs.roots }}
+          FILES: ${{ steps.scope.outputs.files }}
         run: |
           set -eu
 
@@ -151,7 +160,7 @@ jobs:
           umask 077
           printf '%s\n' "$SIGNING_KEY" > "$KEY"
 
-          php spark update:manifest --roots "$ROOTS" --sign "$KEY" \
+          php spark update:manifest --roots "$ROOTS" ${FILES:+--files "$FILES"} --sign "$KEY" \
             ${SIGNING_KEY_PASSPHRASE:+--passphrase "$SIGNING_KEY_PASSPHRASE"}
 
           rm -f "$KEY"
@@ -240,13 +249,18 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           ROOTS: ${{ steps.scope.outputs.roots }}
           REQUIRED: ${{ steps.scope.outputs.required }}
+          FILES: ${{ steps.scope.outputs.files }}
         run: |
+          FILES_CELL=none
+          [ -n "$FILES" ] && FILES_CELL="\`$FILES\`"
+
           {
             echo "### Published $VERSION"
             echo
             echo "| | |"
             echo "|---|---|"
             echo "| Covers | \`$ROOTS\` |"
+            echo "| Root files | $FILES_CELL |"
             echo "| Required step | $([ "$REQUIRED" = 1 ] && echo yes || echo no) |"
             echo "| Latest | no — promote it on the project page |"
             echo

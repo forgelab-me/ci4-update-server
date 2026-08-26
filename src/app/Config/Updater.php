@@ -12,9 +12,9 @@ use Forgelabme\Ci4Updater\Config\Updater as BaseUpdater;
  */
 class Updater extends BaseUpdater
 {
-    public const VERSION = '1.8.0';
+    public const VERSION = '1.10.1';
 
-    public const DATE = '2026-08-21';
+    public const DATE = '2026-08-26';
 
     public const USER_AGENT = 'UpdateServerAdmin/1.0';
 
@@ -24,6 +24,12 @@ class Updater extends BaseUpdater
     public ?string $appName = 'Update Server';
 
     public array $allowedRoots = ['app', 'public', 'vendor'];
+
+    // A release that ships vendor/ (dependencies moved) also ships these, so
+    // the two never describe different dependency sets on disk. The publish
+    // workflow passes them via `update:manifest --files` precisely when it
+    // ships vendor — see .github/workflows/publish.yml.
+    public array $allowedFiles = ['composer.json', 'composer.lock'];
 
     // Reuse the app's own app_settings table instead of a JSON file in writable/.
     public string $settingsClass = \App\Models\AppSettingModel::class;

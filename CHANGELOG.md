@@ -9,6 +9,90 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.10.1] - 2026-08-26
+
+### Fixed
+
+- **A release shipping `vendor/` could leave `composer.json`/`composer.lock`
+  describing a different dependency set than what was actually applied.**
+  Both files live at the project root, outside every root `update:manifest`
+  scans (`app`, `public`, `vendor`), so swapping in a new `vendor/` never
+  touched them — a `composer install` run later on the same install would
+  reproduce the *previous* dependency set, not the one actually running.
+
+  The publish workflow now passes `--files composer.json,composer.lock` to
+  `update:manifest` precisely when `vendor/` ships, and
+  `Config\Updater::$allowedFiles` names them so this server accepts writing
+  them when it applies an update to itself. Releases that don't touch
+  `vendor/` are unaffected — there's nothing to keep in sync.
+
+### Upgrading
+
+Nothing to configure. This release itself ships `vendor/` (the trigger for
+the fix to take effect) and is scoped `app,public,vendor` with
+`composer.json`/`composer.lock` alongside it, so applying it is also the
+first release where the two land back in sync.
+
+## [1.10.0] - 2026-08-26
+
+### Changed
+
+- **`forgelab-me/ci4-updater` moves from 2.11.0 to 2.16.0** — five releases'
+  worth of changes to the self-update system this server runs on itself. Two
+  are worth knowing about; the rest apply with nothing to do:
+
+  - **A maintenance window now opens while an update is writing files**, and
+    every route except `/admin/updates` itself answers `503` for as long as
+    it's open — the public API included, so a connected app can never fetch a
+    release mid-write. It's opt-in at the package level; this release wires
+    the filter up in `app/Config/Filters.php`. Closes the moment writing
+    finishes, or on its own after ten minutes if the process dies first.
+  - **A restore now offers to revert the migrations an update ran**, not just
+    the files, when rolling back to a backup made from 2.15+.
+
+  Drift detection (2.16.0), `updater:check`/`updater:apply` CLI commands
+  (2.12.0), and manifests declaring their PHP/extension requirements (2.13.0)
+  all apply automatically — nothing here required a change.
+
+### Upgrading
+
+This release must ship `vendor/` — scoped `app,public,vendor`, marked as a
+required step, or `composer install` run on the server. No migration, no
+configuration: the maintenance window costs nothing unless an update is
+actually applying.
+
+## [1.9.0] - 2026-08-26
+
+### Added
+
+- **Trusted Publishing now accepts GitLab CI, not just GitHub Actions**, via
+  [`forgelab-me/ci4-trusted-publishing`](https://github.com/forgelab-me/ci4-trusted-publishing)
+  ^1.1. A trusted publisher's Provider field picks which CI system it trusts;
+  GitLab's project path is allowed to nest (`group/subgroup/project`), unlike
+  GitHub's flat `owner/repo`.
+
+  Which provider verifies an incoming token is picked from its own (unverified)
+  `iss` claim before anything is checked — not tried against every configured
+  provider in turn — so a GitHub-signed token never costs a live fetch of
+  GitLab's keys, and vice versa. See [docs/publishing.md](docs/publishing.md)
+  for a GitLab CI workflow.
+
+- **A trusted publisher can now pin the workflow file itself**, not just the
+  repository and environment. Leave it blank and any workflow in the
+  repository satisfies the row, same as before; set it and a token minted by
+  any *other* pipeline file in that repository — someone else's job, added
+  later, with different reviewers — is refused.
+
+### Upgrading
+
+Run `php spark migrate --all` from `src/` — one new nullable column on
+`trusted_publishers`, starting empty on every existing row, which is exactly
+"accepts any workflow" and changes nothing for a publisher already trusted.
+
+This release must ship `vendor/`: `forgelab-me/ci4-trusted-publishing` moved
+from 1.0 to 1.1. A release scoped `app,public,vendor`, or `composer install
+--no-dev` on the server, and mark it as a required step.
+
 ## [1.8.0] - 2026-08-21
 
 ### Added

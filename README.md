@@ -233,13 +233,13 @@ credential, one endpoint to use it:
 
 - **A publish token** — created on the project page, scoped `publish:{slug}`,
   optionally with an expiry. One secret in the workflow.
-- **Trusted Publishing** — no stored secret. GitHub mints an identity token for
-  the workflow, the server checks it against a trusted publisher pinned on the
-  repository *and* the numeric account id, and hands back a 15-minute publish
-  token.
+- **Trusted Publishing** — no stored secret. GitHub Actions or GitLab CI mints
+  an identity token for the workflow, the server checks it against a trusted
+  publisher pinned on the repository *and* the numeric account id — optionally
+  down to one workflow file — and hands back a 15-minute publish token.
 
 ```
-POST /api/{slug}/publish/token    Authorization: Bearer <GitHub OIDC token>
+POST /api/{slug}/publish/token    Authorization: Bearer <CI identity token>
 POST /api/{slug}/releases         Authorization: Bearer <publish token>
 ```
 
@@ -288,6 +288,18 @@ To cut a release of this server itself: bump `src/app/Config/Updater.php`, run
 own project (e.g. slug `update-server`, pointing `update_server_url` at
 itself or another instance), then use the `/admin/updates` panel to check,
 download, diff, and apply — with automatic backup and DB migrations.
+
+If `update_server_url` points at a *different* origin than this install, that
+project's token is only sent when the two share an origin — `ci4-updater`
+2.11+ drops it across origins so a token can't leak to wherever a redirect
+happens to end up. Point at another instance's token-protected project only if
+it is reachable on the same origin, or leave that project public.
+
+While an update is writing files, every route except `/admin/updates` itself
+answers `503` — including the public API, so a connected app never fetches a
+release mid-write. The window closes as soon as writing finishes, or on its
+own after `Config\Updater::$maintenanceTtl` (ten minutes) if the process dies
+first.
 
 Paste the matching section of [CHANGELOG.md](CHANGELOG.md) into the upload
 form's *Changelog* field: that text is what other instances see in their
