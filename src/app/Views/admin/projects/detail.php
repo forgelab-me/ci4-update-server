@@ -185,8 +185,14 @@
                                     <span class="text-muted" title="Built before ci4-updater 2.6, which is when a release started declaring its scope.">—</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="text-end font-monospace small text-muted">
-                                <?= $r['size'] !== null ? number_to_size($r['size'], 1) : '—' ?>
+                            <td class="text-end font-monospace small">
+                                <?php if ($r['size'] !== null): ?>
+                                    <span class="text-muted"><?= number_to_size($r['size'], 1) ?></span>
+                                <?php else: ?>
+                                    <span class="text-danger" title="The archive is missing from writable/uploads/ — downloading this release 404s.">
+                                        <i class="bi bi-x-octagon me-1"></i>Missing
+                                    </span>
+                                <?php endif; ?>
                             </td>
                             <td class="text-end font-monospace small">
                                 <?php $dl = (int) ($r['downloads'] ?? 0); ?>

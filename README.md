@@ -134,6 +134,11 @@ From the dashboard (`/admin`):
    what's currently latest without promoting it is easy to do by accident, so
    the dashboard flags it — a **vX.X.X pending** badge next to any project
    with a release that outranks its current latest.
+
+   The dashboard also checks the latest release's archive is actually still
+   on disk. A **File missing** badge means downloads of it are 404ing for
+   every connected app right now — the file was moved, deleted, or lost some
+   other way.
 4. **Required step** — mark a release apps must not jump over, and it is
    served on its own until they have applied it. Worth it when a release
    ships a directory later ones don't, or a migration a later one depends on.

@@ -73,6 +73,12 @@
                         <?php else: ?>
                             <span class="text-muted">—</span>
                         <?php endif; ?>
+                        <?php if (isset($broken[$p['id']])): ?>
+                            <span class="badge bg-danger"
+                                  title="v<?= esc($broken[$p['id']]) ?>'s archive is missing from writable/uploads/ — downloads of it 404 for every connected app.">
+                                <i class="bi bi-x-octagon me-1"></i>File missing
+                            </span>
+                        <?php endif; ?>
                         <?php if (isset($pending[$p['id']])): ?>
                             <span class="badge bg-warning text-dark"
                                   title="v<?= esc($pending[$p['id']]) ?> was uploaded after the current latest release but hasn't been promoted yet.">

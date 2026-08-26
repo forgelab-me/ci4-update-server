@@ -46,6 +46,29 @@ final class ReleaseModelTest extends CIUnitTestCase
         ], true);
     }
 
+    /**
+     * Like makeRelease(), but zip_path points at a file that genuinely
+     * exists — for tests where "the archive is actually there" matters.
+     * Returns [releaseId, path]; the caller is responsible for unlink()ing it.
+     */
+    private function makeReleaseWithRealFile(int $projectId, string $version, bool $isLatest = false): array
+    {
+        $path = sys_get_temp_dir() . '/ci4us-release-' . bin2hex(random_bytes(4)) . '.zip';
+        file_put_contents($path, 'not really a zip, just needs to exist');
+
+        $id = (int) $this->releases->insert([
+            'project_id'    => $projectId,
+            'version'       => $version,
+            'zip_path'      => $path,
+            'manifest_path' => $path,
+            'is_latest'     => $isLatest ? 1 : 0,
+            'released_at'   => '2026-06-01',
+            'created_at'    => '2026-06-01 12:00:00',
+        ], true);
+
+        return [$id, $path];
+    }
+
     public function testSetLatestLeavesExactlyOneLatestRelease(): void
     {
         $project = $this->makeProject('my-app');
@@ -181,5 +204,44 @@ final class ReleaseModelTest extends CIUnitTestCase
         $this->makeRelease($project, '2.0.0');
 
         $this->assertArrayNotHasKey($project, $this->releases->pendingPromotions());
+    }
+
+    public function testBrokenLatestReleasesFlagsAMissingArchive(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.0.0', true); // zip_path never actually exists
+
+        $this->assertSame('1.0.0', $this->releases->brokenLatestReleases()[$project]);
+    }
+
+    public function testBrokenLatestReleasesIsSilentWhenTheArchiveExists(): void
+    {
+        $project = $this->makeProject('my-app');
+        [, $path] = $this->makeReleaseWithRealFile($project, '1.0.0', true);
+
+        try {
+            $this->assertArrayNotHasKey($project, $this->releases->brokenLatestReleases());
+        } finally {
+            unlink($path);
+        }
+    }
+
+    /**
+     * A missing archive only matters for the release actually being served.
+     * An older, un-promoted release with a missing file isn't breaking any
+     * download — that belongs to the project's own releases table, not the
+     * dashboard's "something is actively broken" indicator.
+     */
+    public function testBrokenLatestReleasesIgnoresNonLatestReleases(): void
+    {
+        $project = $this->makeProject('my-app');
+        [, $path] = $this->makeReleaseWithRealFile($project, '2.0.0', true);
+        $this->makeRelease($project, '1.0.0'); // missing archive, but not latest
+
+        try {
+            $this->assertArrayNotHasKey($project, $this->releases->brokenLatestReleases());
+        } finally {
+            unlink($path);
+        }
     }
 }

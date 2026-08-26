@@ -71,6 +71,7 @@ class Admin extends BaseController
             'projects'     => $projects->withReleasesCount(),
             'downloads'    => $releases->downloadTotals(),
             'pending'      => $releases->pendingPromotions(),
+            'broken'       => $releases->brokenLatestReleases(),
         ]);
     }
 

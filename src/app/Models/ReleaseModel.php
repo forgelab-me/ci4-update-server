@@ -143,4 +143,28 @@ class ReleaseModel extends Model
 
         return $pending;
     }
+
+    /**
+     * Projects whose current latest release's archive is missing from disk.
+     *
+     * The latest release is what `/api/{slug}/files/.../release.zip` actually
+     * serves; when its zip is gone, every real client downloading it gets a
+     * 404 with nothing in the panel to explain why. Only latest releases are
+     * checked — an older, un-promoted release with a missing file isn't
+     * serving anyone, so it belongs to the releases table, not the dashboard.
+     *
+     * @return array<int, string> project_id => version
+     */
+    public function brokenLatestReleases(): array
+    {
+        $broken = [];
+
+        foreach ($this->where('is_latest', 1)->findAll() as $release) {
+            if (empty($release['zip_path']) || ! file_exists($release['zip_path'])) {
+                $broken[(int) $release['project_id']] = (string) $release['version'];
+            }
+        }
+
+        return $broken;
+    }
 }

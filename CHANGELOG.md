@@ -9,6 +9,28 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.8.0] - 2026-08-21
+
+### Added
+
+- **The dashboard flags a release whose archive is missing from disk.** The
+  "latest" release is what `/api/{slug}/files/.../release.zip` actually
+  serves — when its zip is gone (moved, deleted, or lost to a past bug),
+  every real client downloading it gets a silent 404 with nothing in the
+  panel to explain why. A red **File missing** badge next to the project's
+  latest version says so outright, and the affected release's **Size**
+  column in its own releases table shows **Missing** instead of a size.
+
+  Checked against the actual filesystem on every dashboard load rather than
+  stored, so it can never go stale. Only the latest release is checked here —
+  an older, un-promoted release with a missing file isn't breaking any
+  download, so it stays a detail of the project's own releases table.
+
+### Upgrading
+
+Nothing to do beyond deploying — no migration, no configuration. Covers
+`app/` only.
+
 ## [1.7.0] - 2026-08-21
 
 ### Added
