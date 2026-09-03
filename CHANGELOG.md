@@ -9,6 +9,28 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.10.2] - 2026-09-03
+
+### Fixed
+
+- **CI hardening, flagged by GitHub's own security checks — nothing here
+  touches the shipped app.**
+  - `tests.yml` carried no `permissions` block, so its `GITHUB_TOKEN` held
+    the default read-write grant on a job that only checks out code and runs
+    `phpunit`. Scoped to `contents: read`, matching `docker.yml` and
+    `publish.yml`, which already had one.
+  - The four `docker/*` actions in `docker.yml` (`setup-buildx-action`,
+    `login-action`, `metadata-action`, `build-push-action`) were still on
+    majors built against Node 20, which GitHub Actions runners are
+    deprecating. Bumped to the majors built against Node 24
+    (`v3→v4`, `v3→v4`, `v5→v6`, `v6→v7`); nothing in this workflow's own
+    inputs changed underneath them.
+
+### Upgrading
+
+Nothing to deploy. This release touches `.github/workflows/` only — the
+repository's own CI, not `app/`, `public/`, or `vendor/`.
+
 ## [1.10.1] - 2026-08-26
 
 ### Fixed

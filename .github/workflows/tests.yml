@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# The default GITHUB_TOKEN grants read-write on everything; this job only
+# checks out code and runs tests, so it needs none of that.
+permissions:
+  contents: read
+
 jobs:
   phpunit:
     runs-on: ubuntu-latest
