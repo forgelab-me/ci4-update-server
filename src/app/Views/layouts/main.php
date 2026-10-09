@@ -53,9 +53,13 @@
             <a href="<?= site_url('admin/profile') ?>" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-person me-1"></i><?= esc(auth()->user()->username) ?>
             </a>
-            <a href="<?= site_url('auth/logout') ?>" class="btn btn-sm btn-outline-secondary" title="Logout">
-                <i class="bi bi-box-arrow-right"></i>
-            </a>
+            <?php /* A form, not a link: a GET that logs you out can be fired by any page that embeds an image. */ ?>
+            <form method="POST" action="<?= site_url('auth/logout') ?>" class="m-0">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Logout">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </form>
         </div>
     </div>
 </nav>

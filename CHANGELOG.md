@@ -9,6 +9,86 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.11.0] - 2026-10-09
+
+A security release, from a review of everything added since the first one.
+
+### Fixed
+
+- **A stolen publish credential could make apps install a release it
+  uploaded.** The docs promised it could only add a release nobody is served,
+  but `required` was passed through from the API — and a required step is
+  served *ahead of the newest release* to every app that is behind it. Marked
+  required below the latest, an uploaded release was sent to all of them (apps
+  that verify signatures still refuse it; the others do not).
+
+  Through the API a release can now be a required step only if its version is
+  above every version the project already has — which is what a release
+  shipping `vendor/` is when it is cut, so the publish workflow is unaffected.
+  Anything else is refused with a `422` saying so. Marking an older release
+  required is done from the project page, where a person is deciding.
+
+- **Behind a reverse proxy, the per-IP limits were one limit for everybody.**
+  Every request arrived from the proxy's address, so the 10-a-minute cap on
+  the login form and the 20-a-minute cap on publishing were shared by all
+  clients: anyone who could reach the site could lock the admin out of logging
+  in, or stop a pipeline from publishing, just by sending requests. The setting
+  that fixes it could not be reached from the Docker image at all —
+  `Config\App::$proxyIPs` is an array, and the environment only overrides keys
+  that already exist.
+
+  `TRUSTED_PROXIES` (IPs or CIDRs, comma-separated) now fills it, with
+  `TRUSTED_PROXY_HEADER` to name the header if it is not `X-Forwarded-For`. A
+  header from anywhere else is still ignored.
+
+- **Publish tokens outlived their project.** A token is scoped
+  `publish:{slug}` — to a name, not a project — and deleting or renaming a
+  project revoked nothing, so whichever project next took that slug inherited
+  every old token. They are now revoked with the project, or when its slug
+  changes.
+
+- **Editing a project could fail with a 500, or leave it with no slug.** A slug
+  that normalised to nothing was saved, and one already held by another project
+  hit the database's unique key. Both are now refused with a message.
+
+- **The admin session cookie was never marked `Secure`**, even on a deployment
+  forcing HTTPS. It now follows `app_forceGlobalSecureRequests`, and is left
+  alone without it so development over `http://` still holds a session.
+
+- **Logging out was a GET**, so any page the admin opened could end their
+  session with an image tag. It is now a POST behind the CSRF filter, with the
+  navbar button turned into a form.
+
+### Changed
+
+- **`forgelab-me/ci4-updater` moves from 2.16.0 to 2.17.0**, the release that
+  lets an update carry root-level files such as `composer.json` and
+  `composer.lock`. This server already allows those two through
+  `Config\Updater::$allowedFiles`, so nothing needs configuring.
+
+### Upgrading
+
+**This release must ship `vendor/`**, with `composer.json` and `composer.lock`
+alongside: the dependencies moved. The publish workflow works that out from
+`composer.lock` and marks the release as a required step on its own. No
+migration.
+
+Three things to check on your side:
+
+- **Behind a reverse proxy, set `TRUSTED_PROXIES`** — the proxy's address, or
+  `172.16.0.0/12` for one on the Docker host. See
+  [docs/docker.md](docs/docker.md#behind-a-reverse-proxy). Leave it empty when
+  the server is reached directly.
+- **A pipeline that marks a release `required` and is not newer than every
+  existing version now gets a `422`.** Upload it without `required` and mark it
+  from the project page.
+- **Anything linking to `/auth/logout` stops working** — it is a POST now. The
+  panel's own button was changed with it.
+
+Deleting or renaming a project also revokes its publish tokens, so a pipeline
+using one needs a new one. Trusted Publishing is unaffected: it mints a fresh
+token on every run.
+
 ## [1.10.2] - 2026-09-03
 
 ### Fixed

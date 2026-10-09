@@ -44,7 +44,7 @@ final class ReleaseIngestor
 
     /**
      * @param array<string, mixed> $project
-     * @param array{changelog?:string, released_at?:string, required?:bool, set_latest?:bool} $meta
+     * @param array{changelog?:string, released_at?:string, required?:bool, set_latest?:bool, required_must_be_newest?:bool} $meta
      *
      * @return array{success:bool, error?:string, version?:string, release_id?:int}
      */
@@ -96,6 +96,23 @@ final class ReleaseIngestor
             // Published bytes are immutable: an app that already downloaded
             // this version must never get different files under the same name.
             return ['success' => false, 'error' => "Version {$version} already exists for this project. Publish a new version instead."];
+        }
+
+        // Set for uploads that arrive through the publish API. A required step
+        // is served ahead of the newest release to every app behind it, so one
+        // marked required below the latest would be pushed to apps by whoever
+        // holds a publish credential. Above everything the project has, it
+        // reaches no one until a person promotes something higher.
+        if (! empty($meta['required']) && ! empty($meta['required_must_be_newest'])) {
+            $highest = $this->releases->highestVersion((int) $project['id']);
+
+            if ($highest !== null && version_compare($version, $highest, '<=')) {
+                return ['success' => false, 'error' => sprintf(
+                    'Through the API a release can only be a required step if its version (%s) is above every version the project already has (%s). Publish it without "required" and mark it from the project page.',
+                    $version,
+                    $highest
+                )];
+            }
         }
 
         $uploadPath = WRITEPATH . 'uploads/' . $project['slug'] . '/' . $version;

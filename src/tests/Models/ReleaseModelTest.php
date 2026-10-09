@@ -206,6 +206,28 @@ final class ReleaseModelTest extends CIUnitTestCase
         $this->assertArrayNotHasKey($project, $this->releases->pendingPromotions());
     }
 
+    /**
+     * version_compare(), not text order: as text, 1.9.0 sorts above 1.10.0.
+     */
+    public function testHighestVersionIsComparedNumericallyAcrossAllReleases(): void
+    {
+        $project = $this->makeProject('my-app');
+        $this->makeRelease($project, '1.9.0', true);
+        $this->makeRelease($project, '1.10.0');
+        $this->makeRelease($project, '1.2.0');
+
+        self::assertSame('1.10.0', $this->releases->highestVersion($project));
+    }
+
+    public function testHighestVersionIsNullForAProjectWithNoReleases(): void
+    {
+        $project = $this->makeProject('my-app');
+        $other   = $this->makeProject('other-app');
+        $this->makeRelease($other, '9.0.0');
+
+        self::assertNull($this->releases->highestVersion($project));
+    }
+
     public function testBrokenLatestReleasesFlagsAMissingArchive(): void
     {
         $project = $this->makeProject('my-app');

@@ -49,6 +49,26 @@ class ReleaseModel extends Model
     }
 
     /**
+     * The highest version this project has, promoted or not; null when it has
+     * none. Compared with version_compare(), since SQL's MAX() would put 1.9.0
+     * above 1.10.0.
+     */
+    public function highestVersion(int $projectId): ?string
+    {
+        $highest = null;
+
+        foreach ($this->db->table('releases')->select('version')->where('project_id', $projectId)->get()->getResultArray() as $row) {
+            $version = (string) $row['version'];
+
+            if ($highest === null || version_compare($version, $highest, '>')) {
+                $highest = $version;
+            }
+        }
+
+        return $highest;
+    }
+
+    /**
      * Records one download of a release archive.
      */
     public function recordDownload(int $releaseId): void

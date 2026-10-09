@@ -104,4 +104,18 @@ class Cookie extends BaseConfig
      * @see https://tools.ietf.org/html/rfc2616#section-2.2
      */
     public bool $raw = false;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        // The session cookie is the admin's credential. A deployment that
+        // redirects everything to HTTPS has no use for it travelling over plain
+        // HTTP, so it follows that setting rather than needing its own — which
+        // nobody would think to turn on. Left alone when HTTPS isn't forced:
+        // local development over http:// would otherwise never keep a session.
+        if (config(App::class)->forceGlobalSecureRequests) {
+            $this->secure = true;
+        }
+    }
 }

@@ -170,17 +170,27 @@ class PublishController extends BaseController
      * whatever a caller sends, `set_latest` is false. A credential that can
      * publish still cannot decide what apps are served.
      *
+     * `required` is the other half of that. A required step is served ahead of
+     * the newest release to any app that is behind it, so a release marked
+     * required *below* the latest is one that apps are sent — exactly what a
+     * stolen credential must not be able to arrange. The API may mark a release
+     * required only when it outranks everything the project already has
+     * (`required_must_be_newest`, enforced by the ingestor): such a release
+     * reaches no one until a person promotes something above it. The panel's own
+     * form has no such limit.
+     *
      * @param array<string, mixed> $post
      *
-     * @return array{changelog:string, released_at:string, required:bool, set_latest:false}
+     * @return array{changelog:string, released_at:string, required:bool, set_latest:false, required_must_be_newest:true}
      */
     public static function uploadMeta(array $post): array
     {
         return [
-            'changelog'   => trim((string) ($post['changelog'] ?? '')),
-            'released_at' => (string) (($post['released_at'] ?? '') ?: date('Y-m-d')),
-            'required'    => (bool) ($post['required'] ?? false),
-            'set_latest'  => false,
+            'changelog'               => trim((string) ($post['changelog'] ?? '')),
+            'released_at'             => (string) (($post['released_at'] ?? '') ?: date('Y-m-d')),
+            'required'                => (bool) ($post['required'] ?? false),
+            'set_latest'              => false,
+            'required_must_be_newest' => true,
         ];
     }
 

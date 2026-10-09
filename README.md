@@ -260,12 +260,16 @@ the question that matters more than either option: where the signing key lives.
   `hash_equals()` against the `Authorization: Bearer` header.
 - Publish credentials are Shield access tokens: stored hashed, scoped to one
   project, and expiring per token. They can add a release but never promote
-  one — see [Publishing from CI](docs/publishing.md).
+  one, nor mark one as a required step unless it is newer than everything the
+  project has — see [Publishing from CI](docs/publishing.md). They are revoked
+  when their project is deleted or renamed, since they are scoped to the slug.
 - Uploaded archives are size-checked end to end — the ZIP itself, and the
   `manifest.json` read out of it before it ever reaches memory — so a crafted
   upload cannot exhaust server memory.
 - `POST /api/{slug}/publish/token` and `POST /api/{slug}/releases` are
   rate-limited per IP, on top of Shield's own throttling on `/auth/login`.
+  Behind a reverse proxy, set `TRUSTED_PROXIES` ([Docker guide](docs/docker.md#behind-a-reverse-proxy))
+  — without it every client shares the proxy's address, and so one limit.
 - Serve this over HTTPS. Every app pointed at it treats its response as
   trusted — see the
   [Security section of ci4-updater](https://github.com/forgelab-me/ci4-updater#security)

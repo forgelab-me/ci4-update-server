@@ -15,13 +15,6 @@ use Forgelabme\TrustedPublishing\ScopedTokens;
 
 class Projects extends BaseController
 {
-    /**
-     * Upper bound for an uploaded release archive. PHP's upload_max_filesize
-     * still applies and may be lower; this is an explicit application-level
-     * cap so the limit doesn't depend on server configuration alone.
-     */
-    private const MAX_RELEASE_BYTES = 256 * 1024 * 1024;
-
     private ProjectModel $projects;
     private ReleaseModel $releases;
 
@@ -93,7 +86,8 @@ class Projects extends BaseController
 
     public function update(int $id): RedirectResponse
     {
-        if (! $this->projects->find($id)) {
+        $project = $this->projects->find($id);
+        if (! $project) {
             return redirect()->to(site_url('admin'));
         }
 
@@ -104,13 +98,33 @@ class Projects extends BaseController
         $slug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $slug));
         $slug = trim($slug, '-');
 
+        // Normalising can leave nothing, and a project without a slug has no
+        // API address and no sensible upload directory.
+        if ($name === '' || $slug === '') {
+            session()->setFlashdata('error', 'Name and slug are required.');
+            return redirect()->to(site_url("projects/{$id}"));
+        }
+
+        $holder = $this->projects->findBySlug($slug);
+        if ($holder !== null && (int) $holder['id'] !== $id) {
+            session()->setFlashdata('error', "The slug \"{$slug}\" belongs to another project.");
+            return redirect()->to(site_url("projects/{$id}"));
+        }
+
         $this->projects->update($id, [
             'name'  => $name,
             'slug'  => $slug,
             'token' => $token !== '' ? $token : null,
         ]);
 
-        session()->setFlashdata('success', 'Project updated.');
+        // A publish token is scoped to the slug, not to the project. Renamed,
+        // the old tokens would sit there unused until another project took the
+        // name — and then publish to it.
+        $revoked = $slug !== $project['slug'] ? $this->revokePublishTokens($project['slug']) : 0;
+
+        session()->setFlashdata('success', $revoked > 0
+            ? "Project updated. {$revoked} publish token(s) for the old slug were revoked — pipelines need a new one."
+            : 'Project updated.');
         return redirect()->to(site_url("projects/{$id}"));
     }
 
@@ -141,6 +155,9 @@ class Projects extends BaseController
         if (is_dir($uploadDir)) {
             $this->removeDir($uploadDir);
         }
+
+        // They are scoped to the slug, which the next project may take.
+        $this->revokePublishTokens($project['slug']);
 
         $this->releases->where('project_id', $id)->delete();
         $this->projects->delete($id);
@@ -536,6 +553,23 @@ class Projects extends BaseController
         }
 
         return $releases;
+    }
+
+    /**
+     * Revokes every publish token scoped to $slug, and says how many.
+     */
+    private function revokePublishTokens(string $slug): int
+    {
+        $scope   = 'publish:' . $slug;
+        $revoked = 0;
+
+        foreach (ScopedTokens::withScope($scope) as $token) {
+            if (ScopedTokens::revoke((int) $token['id'], $scope)) {
+                $revoked++;
+            }
+        }
+
+        return $revoked;
     }
 
     private function deleteReleaseFiles(array $release): void

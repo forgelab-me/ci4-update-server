@@ -15,7 +15,7 @@ name: Publish release
 #
 # Environment secrets:
 #   RELEASE_SIGNING_KEY             the private key (PEM), matching the public
-#                                   key deployed in app/Config/keys
+#                                   key deployed in app/Config/Keys
 #   RELEASE_SIGNING_KEY_PASSPHRASE  optional, if the key is protected
 
 on:

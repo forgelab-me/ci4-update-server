@@ -7,6 +7,14 @@ token scoped `publish:{slug}` that may upload to one project and nothing else.
 caller sends. Promotion stays a click on the project page, so a stolen
 credential can only add a release nobody is served.
 
+The same goes for `required`. A required step is served *ahead of* the newest
+release to every app that is behind it, so one marked required below the
+latest would be sent to apps by whoever holds the credential. Through the API a
+release can therefore be a required step only if its version is **above every
+version the project already has** — which is what a release shipping `vendor/`
+is when it is cut — and is refused with a `422` otherwise. Marking an older
+release required is done from the project page, where a person is deciding.
+
 ## Where the signing key lives decides everything
 
 If you sign releases, this is the question that matters more than which
@@ -188,7 +196,8 @@ POST /api/{slug}/releases          Authorization: Bearer <publish token>
 
 `401` means the credential was refused, `403` that it is not scoped to this
 project or no trusted publisher matched, `422` that the archive was rejected —
-the body says which.
+or that `required` was asked of a release that is not above every existing
+version. The body says which.
 
 ## When each is worth it
 

@@ -31,6 +31,8 @@ variables, and that is what Compose passes.
 | `ADMIN_EMAIL` | First admin account. |
 | `ADMIN_PASSWORD` | Its password, hashed by the container at startup. |
 | `ADMIN_PASSWORD_HASH` | A bcrypt hash, if you prefer not to store the plaintext. Takes precedence over `ADMIN_PASSWORD`. |
+| `TRUSTED_PROXIES` | Comma-separated IPs or CIDRs of your reverse proxy. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
+| `TRUSTED_PROXY_HEADER` | Header carrying the client address. Defaults to `X-Forwarded-For`. |
 | `SELF_UPDATE` | `false` in the image — see [Updating](#updating). |
 | `RUN_MIGRATIONS` | Set to `false` to skip migrations at startup. |
 | `APP_PORT` | Host port. Behind a proxy, `127.0.0.1:8080` keeps it off the public interface. |
@@ -100,6 +102,22 @@ Publish on loopback (`APP_PORT=127.0.0.1:8080`), terminate TLS at the proxy,
 and forward the usual headers. Keep `app_baseURL` set to the public HTTPS URL:
 it is what ends up in the `zip_url` and `manifest_url` handed to client apps,
 so getting it wrong sends them to an address they can't reach.
+
+**Also set `TRUSTED_PROXIES`.** Forwarding the headers is not enough: the app
+only believes `X-Forwarded-For` from addresses it has been told to trust.
+Without it every request appears to come from the proxy, and the per-IP limits
+on login (10 a minute) and publishing (20 a minute) become one counter shared
+by everyone — so anyone who can reach the site can lock the admin out of the
+login form, or stop a pipeline from publishing, just by sending requests.
+
+```bash
+# .env — a proxy on the Docker host shows up as the bridge gateway
+TRUSTED_PROXIES=172.16.0.0/12
+```
+
+Leave it empty when the container is reached directly. Trusting the header from
+anyone lets a client choose its own address, which defeats the limits just as
+surely.
 
 ## Building locally
 

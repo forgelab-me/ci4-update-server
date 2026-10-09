@@ -12,7 +12,9 @@ $routes->get('/', 'Home::index');
 // the form can't be brute-forced.
 $routes->get('auth/login', 'Admin::login');
 $routes->post('auth/login', 'Admin::login', ['filter' => 'auth-rates']);
-$routes->get('auth/logout', 'Admin::logout');
+// POST, behind the CSRF filter: as a GET, any page could log the admin out
+// with nothing more than an <img src>.
+$routes->post('auth/logout', 'Admin::logout');
 $routes->get('dashboard', 'Admin::index', ['filter' => 'admin']);
 
 // -------------------------------------------------------------------------

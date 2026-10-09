@@ -304,6 +304,164 @@ final class PublishApiTest extends CIUnitTestCase
         self::assertCount(1, (new ReleaseModel())->getForProject($id));
     }
 
+    // -- Required steps ---------------------------------------------------------
+
+    /** Slug of the project whose uploads a test wrote, for tearDown to remove. */
+    private ?string $uploadedSlug = null;
+
+    protected function tearDown(): void
+    {
+        // Only ever the uniquely named directory a test itself created — never
+        // a slug a developer might really be using.
+        if ($this->uploadedSlug !== null) {
+            $dir = WRITEPATH . 'uploads/' . $this->uploadedSlug;
+
+            if (is_dir($dir)) {
+                $items = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::CHILD_FIRST
+                );
+
+                foreach ($items as $item) {
+                    $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+                }
+
+                rmdir($dir);
+            }
+
+            $this->uploadedSlug = null;
+        }
+
+        parent::tearDown();
+    }
+
+    /** A project under a throwaway slug, so its upload directory is ours to delete. */
+    private function makeUploadProject(): int
+    {
+        $this->uploadedSlug = 'req' . bin2hex(random_bytes(4));
+
+        return $this->makeProject($this->uploadedSlug);
+    }
+
+    private function seedRelease(int $projectId, string $version, bool $latest = false): void
+    {
+        (new ReleaseModel())->insert([
+            'project_id' => $projectId, 'version' => $version,
+            'zip_path' => '/tmp/seed.zip', 'manifest_path' => '/tmp/seed.json',
+            'is_latest' => $latest ? 1 : 0, 'released_at' => '2026-06-01', 'created_at' => '2026-06-01 12:00:00',
+        ]);
+    }
+
+    /**
+     * isValid() calls is_uploaded_file(), false for anything a test creates, so
+     * the ingestor is reached through a double that reports a real upload.
+     */
+    private function fakeUpload(string $zip): \CodeIgniter\HTTP\Files\UploadedFile
+    {
+        return new class ($zip, 'release.zip', 'application/zip', filesize($zip), UPLOAD_ERR_OK) extends \CodeIgniter\HTTP\Files\UploadedFile {
+            public function isValid(): bool
+            {
+                return true;
+            }
+
+            public function move(string $targetPath, ?string $name = null, bool $overwrite = false): bool
+            {
+                copy($this->getTempName(), rtrim($targetPath, '/\\') . DIRECTORY_SEPARATOR . ($name ?? $this->getName()));
+
+                return true;
+            }
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $meta what the ingestor is asked for
+     *
+     * @return array{success:bool, error?:string, version?:string, release_id?:int}
+     */
+    private function ingest(int $projectId, string $version, array $meta): array
+    {
+        return (new \App\Libraries\ReleaseIngestor(new ReleaseModel()))->ingest(
+            (new ProjectModel())->find($projectId),
+            $this->fakeUpload($this->zipWith($version)),
+            $meta
+        );
+    }
+
+    /**
+     * What an app on 1.0.0 is told to install, per latest.json.
+     */
+    private function servedTo1_0_0(): string
+    {
+        $r = $this->call('get', 'api/' . $this->uploadedSlug . '/latest.json?from=1.0.0');
+
+        return json_decode($r->getJSON(), true)['version'];
+    }
+
+    /**
+     * The guarantee the docs make: a stolen publish credential can add a
+     * release nobody is served. A required step is served ahead of the newest
+     * one to any app that is behind it, so an API caller that could mark one
+     * required *below* the latest would be pushing code to every such app.
+     */
+    public function testTheApiCannotSlipARequiredStepIntoTheRangeAppsWalk(): void
+    {
+        $id = $this->makeUploadProject();
+        $this->seedRelease($id, '1.0.0');
+        $this->seedRelease($id, '2.0.0', true);
+
+        $result = $this->ingest($id, '1.5.0', \App\Controllers\PublishController::uploadMeta(['required' => '1']));
+
+        self::assertSame('2.0.0', $this->servedTo1_0_0(), 'an app on 1.0.0 must still be sent the latest release');
+        self::assertFalse($result['success']);
+        self::assertStringContainsString('required', $result['error']);
+    }
+
+    /**
+     * The pipeline's own case: a release that ships vendor/ is uploaded above
+     * everything that exists, as a required step. That must keep working.
+     */
+    public function testTheApiMayStillShipARequiredReleaseAboveEveryExistingVersion(): void
+    {
+        $id = $this->makeUploadProject();
+        $this->seedRelease($id, '1.9.0', true);
+        $this->seedRelease($id, '1.10.0');
+
+        $result = $this->ingest($id, '1.10.1', \App\Controllers\PublishController::uploadMeta(['required' => '1']));
+
+        self::assertTrue($result['success'], $result['error'] ?? '');
+        self::assertSame(1, (int) (new ReleaseModel())->find($result['release_id'])['required']);
+    }
+
+    /**
+     * Not an API restriction on the panel: a human is already deciding there,
+     * and may well want an old release to be a required step.
+     */
+    public function testThePanelCanStillMarkAnyReleaseRequired(): void
+    {
+        $id = $this->makeUploadProject();
+        $this->seedRelease($id, '2.0.0', true);
+
+        $result = $this->ingest($id, '1.5.0', ['required' => true, 'set_latest' => false]);
+
+        self::assertTrue($result['success'], $result['error'] ?? '');
+        self::assertSame(1, (int) (new ReleaseModel())->find($result['release_id'])['required']);
+    }
+
+    /**
+     * An ordinary upload below the latest is unaffected — it is not served to
+     * anyone, so there is nothing to protect.
+     */
+    public function testTheApiMayStillUploadAnOlderReleaseThatIsNotRequired(): void
+    {
+        $id = $this->makeUploadProject();
+        $this->seedRelease($id, '2.0.0', true);
+
+        $result = $this->ingest($id, '1.5.0', \App\Controllers\PublishController::uploadMeta([]));
+
+        self::assertTrue($result['success'], $result['error'] ?? '');
+        self::assertSame('2.0.0', $this->servedTo1_0_0());
+    }
+
     /**
      * A token scoped to one project must not reach another. The check happens
      * before the archive is even looked at, so no upload is needed to reach it.

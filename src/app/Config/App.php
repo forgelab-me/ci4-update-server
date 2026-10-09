@@ -182,6 +182,23 @@ class App extends BaseConfig
      */
     public array $proxyIPs = [];
 
+    public function __construct()
+    {
+        parent::__construct();
+
+        // BaseConfig only overrides keys that already exist, so an empty array
+        // can't be filled from the environment — and the Docker image has no
+        // .env to edit it in. TRUSTED_PROXIES (comma-separated IPs or CIDRs)
+        // stands in. Without it every request behind a reverse proxy has the
+        // proxy's address, so the per-IP limits on login and publishing become
+        // one counter shared by everybody.
+        $header = (string) (env('TRUSTED_PROXY_HEADER') ?: 'X-Forwarded-For');
+
+        foreach (array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', '')))) as $proxy) {
+            $this->proxyIPs[$proxy] = $header;
+        }
+    }
+
     /**
      * --------------------------------------------------------------------------
      * Content Security Policy
