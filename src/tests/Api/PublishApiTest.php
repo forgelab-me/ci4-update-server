@@ -463,6 +463,34 @@ final class PublishApiTest extends CIUnitTestCase
     }
 
     /**
+     * "No manifest.json found" for an archive whose manifest is sitting at the
+     * root sends people looking in the wrong place: too large is its own error.
+     */
+    public function testAnOversizedManifestSaysItIsTooLargeNotMissing(): void
+    {
+        $id   = $this->makeUploadProject();
+        $path = WRITEPATH . 'tmp/big-' . bin2hex(random_bytes(4)) . '.zip';
+        @mkdir(dirname($path), 0777, true);
+
+        $zip = new ZipArchive();
+        $zip->open($path, ZipArchive::CREATE);
+        $zip->addFromString('manifest.json', str_repeat('0', 9 * 1024 * 1024));
+        $zip->close();
+
+        $result = (new \App\Libraries\ReleaseIngestor(new ReleaseModel()))->ingest(
+            (new ProjectModel())->find($id),
+            $this->fakeUpload($path),
+            []
+        );
+
+        unlink($path);
+
+        self::assertFalse($result['success']);
+        self::assertStringContainsString('larger than the 8 MB', $result['error']);
+        self::assertStringNotContainsString('No manifest.json found', $result['error']);
+    }
+
+    /**
      * A token scoped to one project must not reach another. The check happens
      * before the archive is even looked at, so no upload is needed to reach it.
      */

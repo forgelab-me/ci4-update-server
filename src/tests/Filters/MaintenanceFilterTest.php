@@ -60,6 +60,44 @@ final class MaintenanceFilterTest extends CIUnitTestCase
         self::assertNotSame(503, $status);
     }
 
+    /**
+     * An update that brings package migrations leaves the window open until a
+     * person runs them. Someone whose session lapsed meanwhile has to be able
+     * to log back in to reach the button.
+     */
+    public function testTheLoginFormStaysReachableDuringTheWindow(): void
+    {
+        MaintenanceWindow::open('testing');
+
+        $status = $this->call('get', 'auth/login')->response()->getStatusCode();
+
+        self::assertSame(200, $status);
+    }
+
+    /**
+     * The login exemption is for the form alone. Everything else, the public
+     * API included, keeps answering 503 — or a connected app could fetch a
+     * release while the files are half-written.
+     */
+    public function testEverythingElseIsStillBlockedWhileTheLoginIsOpen(): void
+    {
+        MaintenanceWindow::open('testing');
+
+        foreach (['/', 'api/my-app/latest.json', 'admin', 'projects/1'] as $uri) {
+            self::assertSame(503, $this->call('get', $uri)->response()->getStatusCode(), $uri);
+        }
+    }
+
+    /**
+     * The update panel (2.18+) warns when this filter is missing, and the wait
+     * for "Run migrations" is only a 503 because it is there. Removing it
+     * would turn a safe pause into a site serving half-migrated code.
+     */
+    public function testThePanelSeesTheFilterAsRegistered(): void
+    {
+        self::assertTrue(MaintenanceWindow::filterRegistered());
+    }
+
     public function testTheWindowClosesOnceLifted(): void
     {
         MaintenanceWindow::open('testing');

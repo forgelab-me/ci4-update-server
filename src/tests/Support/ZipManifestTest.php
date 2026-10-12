@@ -146,10 +146,45 @@ final class ZipManifestTest extends CIUnitTestCase
      */
     public function testReturnsNullWhenTheManifestIsOversized(): void
     {
-        $huge = str_repeat('0', 2 * 1024 * 1024); // over MAX_MANIFEST_BYTES, trivially compressible
+        $huge = str_repeat('0', 9 * 1024 * 1024); // over MAX_MANIFEST_BYTES, trivially compressible
         $zip  = $this->makeZip('oversized.zip', ['manifest.json' => $huge]);
 
         $this->assertNull($this->readManifest($zip));
+        $this->assertTrue(ReleaseIngestor::manifestIsOversized($zip));
+    }
+
+    /**
+     * A release shipping vendor/ lists every file with its hash, so the
+     * manifest grows with the dependency tree: this server's own is ~170 KB, a
+     * larger application's several times that. The cap is there to stop a
+     * decompression bomb, not to turn such a release away.
+     */
+    public function testAManifestListingAThousandsOfFilesIsAccepted(): void
+    {
+        $files = [];
+        for ($i = 0; $i < 25000; $i++) {
+            $files["vendor/package-{$i}/src/Some/Deeply/Nested/Class{$i}.php"] = hash('sha256', (string) $i);
+        }
+
+        $raw = json_encode(['version' => '1.0.0', 'roots' => ['app', 'vendor'], 'files' => $files], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $this->assertGreaterThan(3 * 1024 * 1024, strlen($raw), 'the fixture should be well past the old 1 MiB cap');
+
+        $manifest = $this->readManifest($this->makeZip('big-vendor.zip', ['manifest.json' => $raw]));
+
+        $this->assertIsArray($manifest);
+        $this->assertSame('1.0.0', $manifest['data']['version']);
+    }
+
+    public function testAnOrdinaryManifestIsNotReportedAsOversized(): void
+    {
+        $zip = $this->makeZip('ok.zip', ['manifest.json' => json_encode(['version' => '1.0.0'])]);
+
+        $this->assertFalse(ReleaseIngestor::manifestIsOversized($zip));
+    }
+
+    public function testNoManifestIsNotReportedAsOversized(): void
+    {
+        $this->assertFalse(ReleaseIngestor::manifestIsOversized($this->makeZip('none.zip', ['app/x.php' => '<?php'])));
     }
 
     /**

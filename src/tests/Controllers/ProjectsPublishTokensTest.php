@@ -27,6 +27,15 @@ final class ProjectsPublishTokensTest extends CIUnitTestCase
     /** Null so Shield's tables (users, tokens) are migrated too. */
     protected $namespace;
 
+    protected function tearDown(): void
+    {
+        // actingAs() logs the user into the shared authenticator; left there, it
+        // would make every later test in the run start out logged in.
+        auth()->logout();
+
+        parent::tearDown();
+    }
+
     private function admin(): User
     {
         $users = new UserModel();

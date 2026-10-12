@@ -300,10 +300,20 @@ happens to end up. Point at another instance's token-protected project only if
 it is reachable on the same origin, or leave that project public.
 
 While an update is writing files, every route except `/admin/updates` itself
-answers `503` — including the public API, so a connected app never fetches a
-release mid-write. The window closes as soon as writing finishes, or on its
-own after `Config\Updater::$maintenanceTtl` (ten minutes) if the process dies
-first.
+and the login form answers `503` — including the public API, so a connected app
+never fetches a release mid-write. The window closes as soon as writing
+finishes, or on its own after `Config\Updater::$maintenanceTtl` (ten minutes) if
+the process dies first.
+
+**Dependencies with their own migrations.** A release that ships `vendor/` can
+bring a package whose new version needs a schema change (Shield adding a
+column, say). Those migration files only exist once `vendor/` has been swapped,
+so the update lists them when it is downloaded, with a box ticked by default,
+writes the release, and then **stays in maintenance** until you press *Run
+migrations* on `/admin/updates` — or run `php spark updater:finalize`. The site
+answers `503` meanwhile, up to `Config\Updater::$finalizeTtl` (an hour). If the
+panel itself cannot start on the old schema, the command line is the way
+through. A release that doesn't touch `vendor/` is unaffected.
 
 Paste the matching section of [CHANGELOG.md](CHANGELOG.md) into the upload
 form's *Changelog* field: that text is what other instances see in their

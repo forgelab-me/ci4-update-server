@@ -9,6 +9,61 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.12.0] - 2026-10-12
+
+### Added
+
+- **An update can now run the migrations that arrive with `vendor/`.** A release
+  can ship a package whose new version needs a schema change — Shield adding a
+  column, say — and those migration files only exist once `vendor/` has been
+  swapped, in a process that has not loaded them. Until now the new code ran on
+  the old schema until somebody noticed, which is a 500 on every request.
+
+  The update panel lists them when a release is downloaded, with a box ticked by
+  default. Ticked, the update writes everything and then **stays in
+  maintenance** until you press *Run migrations* on `/admin/updates` (or run
+  `php spark updater:finalize`): that runs `migrate --all` in a fresh process
+  against the new `vendor/`, records the batch so a rollback reverts it with
+  the update, and closes the window. If it fails, or nobody finishes, the site
+  stays on `503` for up to an hour (`Config\Updater::$finalizeTtl`) and further
+  updates are refused. Restoring the backup also ends it.
+
+  A release that doesn't touch `vendor/` is unaffected.
+
+### Changed
+
+- **`forgelab-me/ci4-updater` moves from 2.17.1 to 2.18.0**, which brings the
+  above. 2.17.1 had fixed two things worth having: restoring an older update
+  with *revert migrations* could undo the migrations of later ones, and two
+  updates could run at once. Neither can now.
+
+- **The login form stays reachable while an update is pending.** The wait for
+  *Run migrations* can last up to an hour, and someone whose session lapsed in
+  the meantime would otherwise be unable to get back in to press it. Everything
+  else — the public API included — keeps answering `503`.
+
+### Fixed
+
+- **A release with a large `vendor/` could be refused as having no manifest.**
+  The 1 MB ceiling on `manifest.json`, added in 1.6.4 against decompression
+  bombs, was too tight for a manifest that lists every file with its hash: this
+  server's own is ~170 KB, but an application with a big dependency tree is
+  several times that. The ceiling is now 8 MB, and a manifest past it is
+  reported as too large rather than missing, which sent people looking in the
+  wrong place.
+
+### Upgrading
+
+**This release must ship `vendor/`** — the dependency moved. The publish
+workflow works that out from `composer.lock` and marks the release as a
+required step on its own. No migration, no configuration.
+
+Installing this release is still done by the panel you have now, which has no
+such step — and it would have nothing to run anyway, since none of this
+server's dependencies brought a migration. The *Run migrations* step first
+appears on the update *after* this one, if that release's `vendor/` carries
+any.
+
 ## [1.11.0] - 2026-10-09
 
 A security release, from a review of everything added since the first one.

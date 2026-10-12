@@ -80,10 +80,15 @@ class Filters extends BaseFilters
             // 'invalidchars',
 
             // Answers 503 while an update is writing app/ or public/, so
-            // nothing — the panel included — is served through a half-written
-            // codebase. Closed unless an update is actually applying; the
-            // panel itself stays reachable so an admin can watch it finish.
-            'maintenance' => ['except' => ['admin/updates', 'admin/updates/*']],
+            // nothing else is served through a half-written codebase. Closed
+            // unless an update is actually applying.
+            //
+            // The panel stays reachable so an admin can watch it finish — and,
+            // since ci4-updater 2.18, so can the login form: an update that
+            // brings package migrations stops after the swap, window open,
+            // until a person presses "Run migrations" (up to an hour). Someone
+            // whose session lapsed in the meantime must be able to get back in.
+            'maintenance' => ['except' => ['admin/updates', 'admin/updates/*', 'auth/login']],
         ],
         'after' => [
             // 'honeypot',

@@ -27,13 +27,16 @@ final class ReleaseIngestor
     public const MAX_BYTES = 256 * 1024 * 1024;
 
     /**
-     * Cap on manifest.json's *uncompressed* size. A manifest is a small JSON
-     * document; anything past this is either a mistake or a decompression
-     * bomb — a small, highly-compressible entry that expands to gigabytes
-     * once read into memory. Checked via statName() before the content is
-     * ever pulled out, so the bomb never actually goes off.
+     * Cap on manifest.json's *uncompressed* size. A manifest is a JSON document
+     * listing every file with its hash, so it grows with a release that ships
+     * vendor/ — roughly 150 bytes a file: this server's own is ~170 KB, an
+     * application with a large dependency tree several times that. Past this
+     * it is either a mistake or a decompression bomb — a small,
+     * highly-compressible entry that expands to gigabytes once read into
+     * memory. Checked via statName() before the content is ever pulled out, so
+     * the bomb never actually goes off.
      */
-    private const MAX_MANIFEST_BYTES = 1 * 1024 * 1024;
+    private const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 
     private ReleaseModel $releases;
 
@@ -74,7 +77,12 @@ final class ReleaseIngestor
 
         $read = self::readManifestFromZip($zip->getTempName());
         if ($read === null) {
-            return ['success' => false, 'error' => 'No manifest.json found inside the ZIP. Make sure it is included at the root of the archive.'];
+            // Not found, and too large to read, are different problems — and
+            // telling someone their manifest is missing when it is sitting at
+            // the root of the archive sends them looking in the wrong place.
+            return ['success' => false, 'error' => self::manifestIsOversized($zip->getTempName())
+                ? sprintf('manifest.json inside the ZIP is larger than the %d MB this server reads. It lists every file in the release; check that nothing unintended (a cache, a build directory) was included.', self::MAX_MANIFEST_BYTES / 1048576)
+                : 'No manifest.json found inside the ZIP. Make sure it is included at the root of the archive.'];
         }
 
         $manifest = $read['data'];
@@ -180,6 +188,25 @@ final class ReleaseIngestor
         return (is_array($data) && json_last_error() === JSON_ERROR_NONE)
             ? ['data' => $data, 'raw' => $content]
             : null;
+    }
+
+    /**
+     * Whether the archive has a manifest.json that is there but too large to
+     * read — as opposed to missing, or not JSON.
+     */
+    public static function manifestIsOversized(string $zipPath): bool
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            return false;
+        }
+
+        $name      = self::locateManifest($zip);
+        $oversized = $name !== null && ! self::manifestSizeIsSafe($zip, $name);
+
+        $zip->close();
+
+        return $oversized;
     }
 
     /**
