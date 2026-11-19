@@ -9,6 +9,29 @@ you have to do when upgrading. When cutting a release, copy the section for
 that version into the *Changelog* field of the upload form — that text is what
 instances see in their update panel.
 
+## [1.12.1] - 2026-11-19
+
+### Changed
+
+- **Dependencies updated.** In production: `codeigniter4/framework` 4.7.4 →
+  4.7.6, and `firebase/php-jwt` 7.2.1 → 7.2.2 — the library that checks the
+  identity tokens Trusted Publishing is built on. The rest is development
+  tooling only (PHPUnit, php-cs-fixer, Symfony components, Kint, Predis) and
+  never reaches an installation.
+
+  Maintenance releases: the notes for the two published ones say nothing
+  about a security fix, and `composer audit` reports no advisory against the
+  versions installed here, before or after. The 7.2.2 notes are a README
+  change only. No application code changed.
+
+### Upgrading
+
+**This release must ship `vendor/`** — two production packages moved. The
+publish workflow works that out from `composer.lock` and marks the release as
+a required step on its own. No migration, no configuration: neither package
+brings a migration of its own, so the *Run migrations* step the update panel
+now offers has nothing to run here.
+
 ## [1.12.0] - 2026-10-12
 
 ### Added
